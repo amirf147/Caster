@@ -26,7 +26,7 @@ class NavigationNon(MappingRule):
                 blocking=False),
         "erase multi clipboard":
             R(Function(navigation.erase_multi_clipboard)),
-        "find":
+        "finder":
             R(Key("c-f")),
         "find next [<n>]":
             R(Key("f3"))*Repeat(extra="n"),
@@ -60,7 +60,7 @@ class NavigationNon(MappingRule):
         "garb [<nnavi500>]":
             R(Mouse("left") + Mouse("left") + Function(
                 navigation.stoosh_keep_clipboard)),
-        "drop [<nnavi500>]":
+        "dropper [<nnavi500>]":
             R(Mouse("left") + Mouse("left") + Function(
                 navigation.drop_keep_clipboard,
                 capitalization=0,
@@ -73,25 +73,25 @@ class NavigationNon(MappingRule):
             R(Key("c-v")),
         "refresh":
             R(Key("c-r")),
-        "maxiwin":
+        "make maximizing":
             R(Key("w-up")),
         "move window":
             R(Key("a-space, r, a-space, m")),
-        "window (left | lease) [<n>]":
+        "window left [<n>]":
             R(Key("w-left"))*Repeat(extra="n"),
-        "window (right | ross) [<n>]":
+        "window right [<n>]":
             R(Key("w-right"))*Repeat(extra="n"),
-        "monitor (left | lease) [<n>]":
+        "monitor left [<n>]":
             R(Key("sw-left"))*Repeat(extra="n"),
-        "monitor (right | ross) [<n>]":
+        "monitor right [<n>]":
             R(Key("sw-right"))*Repeat(extra="n"),
         "(next | prior) window":
             R(Key("ca-tab, enter")),
         "switch (window | windows)":
             R(Key("ca-tab"))*Repeat(extra="n"),
-        "next tab [<n>]":
+        "page under [<n>]":
             R(Key("c-pgdown"))*Repeat(extra="n"),
-        "prior tab [<n>]":
+        "page over [<n>]":
             R(Key("c-pgup"))*Repeat(extra="n"),
         "close tab [<n>]":
             R(Key("c-w/20"))*Repeat(extra="n"),

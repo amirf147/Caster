@@ -13,8 +13,8 @@ try:  # Try  first loading from caster user directory
 except ImportError:
     from castervoice.rules.core.punctuation_rules.punctuation_support import text_punc_dict
 
-right_spec = "(right | ross)"
-left_spec = "(left | lease)"
+right_spec = "right"
+left_spec = "left"
 shift_spec = "(shift | shin)"
 control_spec = "(control | fly)"
 alt_spec = "alt"
@@ -77,15 +77,15 @@ class ButtonDict():
                                        for i in range(1, 13)})
         self.button_dictionary.update({
             "(tab | tabby)": "tab",
-            "(backspace | clear)": "backspace",
-            "(delete | deli)": "del",
+            "backs": "backspace",
+            "delete": "del",
             "(enter | shock)": "enter",
             left_spec: "left",
             right_spec: "right",
             "(up | sauce)": "up",
             "(down | dunce)": "down",
-            "page (down | dunce)": "pgdown",
-            "page (up | sauce)": "pgup",
+            "fell": "pgdown",
+            "flow": "pgup",
             "zero": "0",
             "one": "1",
             "two": "2",
@@ -111,8 +111,8 @@ class ButtonDict():
             "scroll lock": "scrolllock",
             "num lock": "numlock",
             "caps lock": "capslock",
-            "(home | lease wally | latch)": "home",
-            "(end | ross wally | ratch)": "end",
+            "(home | homer | lease wally)": "home",
+            "(end | sequel | ross wally)": "end",
             # number pad numbers deliberately left off
             # volume control deliberately left off as these are dealt with in HardwareRule and I don't think there's a use case for modifiers there
             # track control deliberately left off as these are (or will be) dealt with in HardwareRule and I don't think there's a use case for modifiers there

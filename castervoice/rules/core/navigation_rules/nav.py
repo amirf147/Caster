@@ -85,7 +85,7 @@ class Navigation(MergeRule):
                                repetitions=50),
 
         # keyboard shortcuts
-        'save':
+        'file retain':
             R(Key("c-s"), rspec="save"),
         "shift click":
             R(Key("shift:down") + Mouse("left") + Key("shift:up")),
@@ -155,13 +155,13 @@ class Navigation(MergeRule):
             R(Key("home:%(nnavi10)s")),
         "(ross wally | ratch) [<nnavi10>]":
             R(Key("end:%(nnavi10)s")),
-        "sauce wally [<nnavi10>]":
+        "topper [<nnavi10>]":
             R(Key("c-home:%(nnavi10)s")),
-        "dunce wally [<nnavi10>]":
+        "bottom [<nnavi10>]":
             R(Key("c-end:%(nnavi10)s")),
         "bird [<nnavi500>]":
             R(Key("c-left:%(nnavi500)s")),
-        "firch [<nnavi500>]":
+        "jump [<nnavi500>]":
             R(Key("c-right:%(nnavi500)s")),
         "brick [<nnavi500>]":
             R(Key("s-left:%(nnavi500)s")),
@@ -186,11 +186,11 @@ class Navigation(MergeRule):
     tell_commands_dict.update(_tpd)
     button_dictionary_500_no_prefix_no_modifier = {
         "tabby": "tab",
-        "clear": "backspace",
+        "backs": "backspace",
         "deli": "del",
         "shock": "enter",
-        "lease": "left",
-        "ross": "right",
+        "left": "left",
+        "right": "right",
         "sauce": "up",
         "dunce": "down",
         "page (down | dunce)": "pgdown",
