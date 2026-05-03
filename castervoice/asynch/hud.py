@@ -42,6 +42,11 @@ SCROLL_BAR_ALWAYS_OFF = qt_attr(
     ("Qt", "ScrollBarAlwaysOff"),
     ("Qt", "ScrollBarPolicy", "ScrollBarAlwaysOff"),
 )
+IGNORED_POLICY = qt_attr(
+    QtWidgets,
+    ("QSizePolicy", "Ignored"),
+    ("QSizePolicy", "Policy", "Ignored"),
+)
 NO_FOCUS = qt_attr(
     QtCore,
     ("Qt", "NoFocus"),
@@ -140,6 +145,8 @@ class HUDWindow(QMainWindow):
         dy = HUDWindow._HEIGHT
         self.server = server
         self.setup_xmlrpc_server()
+        self.setMinimumSize(0, 0)
+        self.setContentsMargins(0, 0, 0, 0)
         self.setGeometry(x, y, dx, dy)
         self.setWindowTitle(settings.HUD_TITLE)
         self.output = QTextEdit()
@@ -147,10 +154,17 @@ class HUDWindow(QMainWindow):
         self.output.setHorizontalScrollBarPolicy(SCROLL_BAR_ALWAYS_OFF)
         self.output.setReadOnly(True)
         self.output.setFocusPolicy(NO_FOCUS)
+        self.output.setMinimumSize(0, 0)
+        self.output.setSizePolicy(IGNORED_POLICY, IGNORED_POLICY)
+        self.output.setFrameStyle(0)
+        self.output.document().setDocumentMargin(0)
         self.setCentralWidget(self.output)
         self.rules_window = None
         self.commands_count = 0
         self.drag_position = None
+        self.top_timer = QtCore.QTimer(self)
+        self.top_timer.timeout.connect(self.stay_on_top)
+        self.top_timer.start(2000)
 
     def event(self, event):
         if event.type() == SHOW_HUD_EVENT:
@@ -222,6 +236,10 @@ class HUDWindow(QMainWindow):
         if event.button() == LEFT_BUTTON:
             self.drag_position = None
             event.accept()
+
+    def stay_on_top(self):
+        if self.isVisible():
+            self.raise_()
 
     def closeEvent(self, event):
         event.accept()
