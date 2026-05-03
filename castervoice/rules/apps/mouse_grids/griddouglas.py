@@ -91,8 +91,8 @@ class DouglasGridRule(MappingRule):
         ShortIntegerRef("x2", 0, 300),
         ShortIntegerRef("y2", 0, 300),
         Choice("action", {
-            "kick": 0,
-            "kick (double | 2)": 1,
+            "yeps": 0,
+            "yeps (double | 2)": 1,
             "psychic": 2,
             "move": 3,
         }),

@@ -120,8 +120,8 @@ class RainbowGridRule(MappingRule):
         ShortIntegerRef("n1", 0, 100),
         ShortIntegerRef("n2", 0, 100),
         Choice("action", {
-            "kick": 0,
-            "kick (double | 2)": 1,
+            "yeps": 0,
+            "yeps (double | 2)": 1,
             "psychic": 2,
             "move": 3,
         }),

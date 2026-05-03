@@ -69,7 +69,7 @@ class LegionGridRule(MappingRule):
     }
     extras = [
         Choice("action", {
-            "kick": 0,
+            "yeps": 0,
             "psychic": 1,
             "select | light": 2,
         }),

@@ -32,6 +32,31 @@ WINDOW_STAYS_ON_TOP_HINT = qt_attr(
     ("Qt", "WindowStaysOnTopHint"),
     ("Qt", "WindowType", "WindowStaysOnTopHint"),
 )
+FRAMELESS_WINDOW_HINT = qt_attr(
+    QtCore,
+    ("Qt", "FramelessWindowHint"),
+    ("Qt", "WindowType", "FramelessWindowHint"),
+)
+SCROLL_BAR_ALWAYS_OFF = qt_attr(
+    QtCore,
+    ("Qt", "ScrollBarAlwaysOff"),
+    ("Qt", "ScrollBarPolicy", "ScrollBarAlwaysOff"),
+)
+NO_FOCUS = qt_attr(
+    QtCore,
+    ("Qt", "NoFocus"),
+    ("Qt", "FocusPolicy", "NoFocus"),
+)
+KEY_T = qt_attr(
+    QtCore,
+    ("Qt", "Key_T"),
+    ("Qt", "Key", "Key_T"),
+)
+LEFT_BUTTON = qt_attr(
+    QtCore,
+    ("Qt", "LeftButton"),
+    ("Qt", "MouseButton", "LeftButton"),
+)
 TEXT_CURSOR_END = qt_attr(
     QtGui,
     ("QTextCursor", "End"),
@@ -108,7 +133,7 @@ class HUDWindow(QMainWindow):
     _MARGIN = 30
 
     def __init__(self, server):
-        QMainWindow.__init__(self, flags=WINDOW_STAYS_ON_TOP_HINT)
+        QMainWindow.__init__(self, flags=WINDOW_STAYS_ON_TOP_HINT | FRAMELESS_WINDOW_HINT)
         x = dragonfly.monitors[0].rectangle.dx - (HUDWindow._WIDTH + HUDWindow._MARGIN)
         y = HUDWindow._MARGIN
         dx = HUDWindow._WIDTH
@@ -118,10 +143,14 @@ class HUDWindow(QMainWindow):
         self.setGeometry(x, y, dx, dy)
         self.setWindowTitle(settings.HUD_TITLE)
         self.output = QTextEdit()
+        self.output.setVerticalScrollBarPolicy(SCROLL_BAR_ALWAYS_OFF)
+        self.output.setHorizontalScrollBarPolicy(SCROLL_BAR_ALWAYS_OFF)
         self.output.setReadOnly(True)
+        self.output.setFocusPolicy(NO_FOCUS)
         self.setCentralWidget(self.output)
         self.rules_window = None
         self.commands_count = 0
+        self.drag_position = None
 
     def event(self, event):
         if event.type() == SHOW_HUD_EVENT:
@@ -168,6 +197,31 @@ class HUDWindow(QMainWindow):
             self.commands_count = 0
             return True
         return QMainWindow.event(self, event)
+
+    def keyPressEvent(self, event):
+        if event.key() == KEY_T:
+            flags = self.windowFlags()
+            if flags & FRAMELESS_WINDOW_HINT:
+                self.setWindowFlags(flags ^ FRAMELESS_WINDOW_HINT)
+            else:
+                self.setWindowFlags(flags | FRAMELESS_WINDOW_HINT)
+            self.show()
+
+    def mousePressEvent(self, event):
+        if event.button() == LEFT_BUTTON:
+            self.drag_position = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == LEFT_BUTTON:
+            if self.drag_position is not None:
+                self.move(event.globalPos() - self.drag_position)
+                event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == LEFT_BUTTON:
+            self.drag_position = None
+            event.accept()
 
     def closeEvent(self, event):
         event.accept()

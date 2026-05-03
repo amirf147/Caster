@@ -139,11 +139,11 @@ class Navigation(MergeRule):
               rdescript="Core: switch to most recent Windows"),
 
         # Ccr Mouse Commands
-        "kick [<nnavi3>]":
+        "yeps [<nnavi3>]":
             R(Function(navigation.left_click))*Repeat(extra="nnavi3"),
         "psychic":
             R(Function(navigation.right_click)),
-        "(kick double|double kick)":
+        "(yeps double|double yeps)":
             R(Function(navigation.left_click)*Repeat(2)),
         "squat":
             R(Function(navigation.left_down)),

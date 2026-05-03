@@ -109,8 +109,8 @@ class SudokuGridRule(MappingRule):
         ShortIntegerRef("s", 0, 10),
         ShortIntegerRef("s0", 0, 10),
         Choice("action", {
-            "kick": 0,
-            "kick (double | 2)": 1,
+            "yeps": 0,
+            "yeps (double | 2)": 1,
             "psychic": 2,
             "move": 3,
         }),

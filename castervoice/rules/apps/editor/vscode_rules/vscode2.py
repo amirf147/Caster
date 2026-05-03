@@ -244,7 +244,7 @@ class VSCodeNonCcrRule(MappingRule):
             R(Key("s-pgup")),
         "terminal page down":
             R(Key("s-pgdown")),
-        "altar kick":
+        "altar yeps":
             R(Key("alt:down") + Mouse("left") + Key("alt:up")),
 
         # Collapsing
