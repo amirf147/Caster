@@ -193,8 +193,8 @@ class Navigation(MergeRule):
         "right": "right",
         "sauce": "up",
         "dunce": "down",
-        "page (down | dunce)": "pgdown",
-        "page (up | sauce)": "pgup",
+        "fell": "pgdown",
+        "flow": "pgup",
     }
     button_dictionary_500_modifier = { 
         key:value for key, value in keyboard_support.button_dictionary_1.items() if value in [

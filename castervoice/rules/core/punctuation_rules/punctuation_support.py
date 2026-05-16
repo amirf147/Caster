@@ -3,8 +3,8 @@ import dragonfly
 
 def double_text_punc_dict():
     return {
-        "choco":                             "\"\"",
-        "thin choco":                        "''",
+        "cutes":                             "\"\"",
+        "thin cutes":                        "''",
         "tickris":                             "``",
         "prekris":                             "()",
         "bracket":                             "[]",
