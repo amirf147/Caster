@@ -111,8 +111,8 @@ class ButtonDict():
             "scroll lock": "scrolllock",
             "num lock": "numlock",
             "caps lock": "capslock",
-            "(home | homer | lease wally)": "home",
-            "(end | sequel | ross wally)": "end",
+            "latch": "home",
+            "ratch": "end",
             # number pad numbers deliberately left off
             # volume control deliberately left off as these are dealt with in HardwareRule and I don't think there's a use case for modifiers there
             # track control deliberately left off as these are (or will be) dealt with in HardwareRule and I don't think there's a use case for modifiers there
