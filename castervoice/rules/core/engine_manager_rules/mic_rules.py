@@ -11,6 +11,10 @@ def _set_mode(mic_mode):
 class CasterMicRule(MappingRule):
     mapping = {
         "caster <mic_mode>": Function(lambda mic_mode: _set_mode(mic_mode)),
+
+        # When user says stop listening (which stops windows speech recognition dictation)
+        # this wakes Caster right back up
+        "stop listening": Function(lambda: _set_mode("on"))
     }
     extras = [
         Choice("mic_mode", {
