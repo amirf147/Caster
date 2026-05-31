@@ -85,13 +85,13 @@ class Navigation(MergeRule):
                                repetitions=50),
 
         # keyboard shortcuts
-        'file retain':
+        'save':
             R(Key("c-s"), rspec="save"),
         "shift click":
             R(Key("shift:down") + Mouse("left") + Key("shift:up")),
         "stoosh [<nnavi500>]":
             R(Function(navigation.stoosh_keep_clipboard), rspec="stoosh"),
-        "cut [<nnavi500>]":
+        "cuts [<nnavi500>]":
             R(Function(navigation.cut_keep_clipboard), rspec="cut"),
         "spark [<nnavi500>] [(<capitalization> <spacing> | <capitalization> | <spacing>) [(bow|bowel)]]":
             R(Function(navigation.drop_keep_clipboard), rspec="spark"),
@@ -155,13 +155,13 @@ class Navigation(MergeRule):
             R(Key("home:%(nnavi10)s")),
         "(ross wally | ratch) [<nnavi10>]":
             R(Key("end:%(nnavi10)s")),
-        "topper [<nnavi10>]":
+        "sauce wally [<nnavi10>]":
             R(Key("c-home:%(nnavi10)s")),
-        "bottom [<nnavi10>]":
+        "dunce wally [<nnavi10>]":
             R(Key("c-end:%(nnavi10)s")),
         "bird [<nnavi500>]":
             R(Key("c-left:%(nnavi500)s")),
-        "jump [<nnavi500>]":
+        "firch [<nnavi500>]":
             R(Key("c-right:%(nnavi500)s")),
         "brick [<nnavi500>]":
             R(Key("s-left:%(nnavi500)s")),
@@ -186,15 +186,15 @@ class Navigation(MergeRule):
     tell_commands_dict.update(_tpd)
     button_dictionary_500_no_prefix_no_modifier = {
         "tabby": "tab",
-        "backs": "backspace",
+        "clear": "backspace",
         "deli": "del",
         "shock": "enter",
         "left": "left",
         "right": "right",
         "sauce": "up",
         "dunce": "down",
-        "fell": "pgdown",
-        "flow": "pgup",
+        "page (down | dunce)": "pgdown",
+        "page (up | sauce)": "pgup",
     }
     button_dictionary_500_modifier = { 
         key:value for key, value in keyboard_support.button_dictionary_1.items() if value in [
@@ -250,8 +250,8 @@ class Navigation(MergeRule):
             "big": True,
         }),
         Choice("splatdir", {
-            "lease": "backspace",
-            "ross": "delete",
+            "left": "backspace",
+            "right": "delete",
         }),
         keyboard_support.modifier_choice_object,
         Choice("button_dictionary_500_no_prefix_no_modifier", button_dictionary_500_no_prefix_no_modifier),

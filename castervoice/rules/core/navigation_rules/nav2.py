@@ -26,7 +26,7 @@ class NavigationNon(MappingRule):
                 blocking=False),
         "erase multi clipboard":
             R(Function(navigation.erase_multi_clipboard)),
-        "finder":
+        "find":
             R(Key("c-f")),
         "find next [<n>]":
             R(Key("f3"))*Repeat(extra="n"),
@@ -60,7 +60,7 @@ class NavigationNon(MappingRule):
         "garb [<nnavi500>]":
             R(Mouse("left") + Mouse("left") + Function(
                 navigation.stoosh_keep_clipboard)),
-        "dropper [<nnavi500>]":
+        "drop [<nnavi500>]":
             R(Mouse("left") + Mouse("left") + Function(
                 navigation.drop_keep_clipboard,
                 capitalization=0,
@@ -73,7 +73,7 @@ class NavigationNon(MappingRule):
             R(Key("c-v")),
         "refresh":
             R(Key("c-r")),
-        "make maximizing":
+        "maxiwin":
             R(Key("w-up")),
         "move window":
             R(Key("a-space, r, a-space, m")),
@@ -89,9 +89,9 @@ class NavigationNon(MappingRule):
             R(Key("ca-tab, enter")),
         "switch (window | windows)":
             R(Key("ca-tab"))*Repeat(extra="n"),
-        "page under [<n>]":
+        "next tab [<n>]":
             R(Key("c-pgdown"))*Repeat(extra="n"),
-        "page over [<n>]":
+        "prior tab [<n>]":
             R(Key("c-pgup"))*Repeat(extra="n"),
         "close tab [<n>]":
             R(Key("c-w/20"))*Repeat(extra="n"),
