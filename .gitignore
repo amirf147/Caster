@@ -49,6 +49,7 @@ kaldi_model*
 
 # Ignore virtual
 venv*
+.venv_latest/
 
 # Dragonfly module loaders
 kaldi_module_loader_plus.py
