@@ -1,4 +1,4 @@
-from dragonfly import Choice, Function, ShortIntegerRef
+from dragonfly import Choice, Function, ShortIntegerRef, NumberRef
 
 try:  # Try first loading from caster user directory
     from numeric_support import word_number, numbers2
@@ -24,7 +24,7 @@ class Numbers(MergeRule):
 
     extras = [
         ShortIntegerRef("wn", 0, 10),
-        ShortIntegerRef("wnKK", 0, 1000000),
+        NumberRef("wnKK", zero=True),
         Choice(
             "long", {
                 "long": " ",
