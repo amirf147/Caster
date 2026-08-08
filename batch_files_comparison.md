@@ -35,10 +35,10 @@ This document provides a terse comparison of the three speech-recognition batch 
 * **Path**: [Run_Caster_Kaldi_Latest.bat](file:///c:/Users/Amir/Documents/Caster/Run_Caster_Kaldi_Latest.bat)
 * **Python Executable**: Local Virtual Environment Python (`.venv_latest\Scripts\python.exe`)
 * **Virtual Environment**: **Yes** (`.venv_latest` directory inside Caster folder)
-* **Dragonfly Source**: Local master clone at `repos\dragonfly` (checked out to `fix/kaldi-deferred-unload` branch)
+* **Dragonfly & Pyvda Source**: Local repos at `repos\pyvda` (stale COM pointer fix fork) and `repos\dragonfly`
 * **Accessibility Backend**: IAccessible2 (`ia2.py` fallback only; UIA code is not present)
 * **Command Executed**:
   ```bat
-  set PYTHONPATH=%USERPROFILE%\Documents\repos\dragonfly
+  set PYTHONPATH=%USERPROFILE%\Documents\repos\pyvda;%USERPROFILE%\Documents\repos\dragonfly
   "%currentpath%.venv_latest\Scripts\python.exe" -m dragonfly load _*.py --engine kaldi --no-recobs-messages --engine-options "model_dir=kaldi_model, vad_padding_end_ms=300"
   ```
