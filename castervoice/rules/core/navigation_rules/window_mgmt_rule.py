@@ -80,8 +80,9 @@ class WindowManagementRule(MappingRule):
     ]
 
 
-# Window switch update sopen_windows_dictlist every 2 second
-timerinstance.set()
+# Window switch polling disabled - causes lexicon pollution & audio buffer overflow risk.
+# Uncomment to re-enable: timerinstance.set()
+# timerinstance.set()
 
 
 def get_rule():
