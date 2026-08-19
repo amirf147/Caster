@@ -3,6 +3,8 @@
 *.pyc
 *.toml
 *.wav
+*.tsv
+saved_audio/
 *.class
 test.py
 log.txt
