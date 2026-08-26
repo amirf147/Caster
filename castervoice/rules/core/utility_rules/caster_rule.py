@@ -1,15 +1,28 @@
-from dragonfly import MappingRule, Function, RunCommand
+from dragonfly import Choice, Function, MappingRule, RunCommand
 
 from castervoice.lib import control, utilities
 from castervoice.lib.ctrl.dependencies import find_pip  # pylint: disable=no-name-in-module
 from castervoice.lib.ctrl.updatecheck import update
 from castervoice.lib.ctrl.mgr.rule_details import RuleDetails
 from castervoice.lib.merge.state.short import R
-from castervoice.asynch.hud_support import show_hud
-from castervoice.asynch.hud_support import hide_hud
-from castervoice.asynch.hud_support import show_rules
-from castervoice.asynch.hud_support import hide_rules
-from castervoice.asynch.hud_support import clear_hud
+from castervoice.asynch.hud_support import (
+    show_hud,
+    hide_hud,
+    show_rules,
+    hide_rules,
+    clear_hud,
+    set_hud_theme,
+    toggle_hud_border,
+    toggle_hud_drag,
+    toggle_hud_scrollbars,
+    increase_hud_font,
+    decrease_hud_font,
+    reset_hud_font,
+    save_hud_profile,
+    load_hud_profile,
+    show_hud_help,
+    hide_hud_help,
+)
 
 _PIP = find_pip()
 
@@ -52,7 +65,46 @@ class CasterRule(MappingRule):
             R(Function(hide_rules), rdescript="Hide the list of active rules"),
         "clear caster hud":
             R(Function(clear_hud), rdescript="Clear output the HUD window"),
+        "show caster [hud] help":
+            R(Function(show_hud_help), rdescript="Show standalone HUD commands and help dialog"),
+        "hide caster [hud] help":
+            R(Function(hide_hud_help), rdescript="Hide standalone HUD commands and help dialog"),
+        "caster hud help":
+            R(Function(show_hud_help), rdescript="Show standalone HUD commands and help dialog"),
+        "caster hud theme [<hud_theme>]":
+            R(Function(set_hud_theme), rdescript="Set or cycle HUD theme"),
+        "caster hud (border | title bar | frame) [toggle]":
+            R(Function(toggle_hud_border), rdescript="Toggle HUD title bar / frameless overlay"),
+        "caster hud (drag | move) [toggle]":
+            R(Function(toggle_hud_drag), rdescript="Toggle HUD mouse drag mode"),
+        "caster hud scroll [toggle]":
+            R(Function(toggle_hud_scrollbars), rdescript="Toggle HUD scrollbars"),
+        "caster hud font (increase | bigger | up)":
+            R(Function(increase_hud_font), rdescript="Increase HUD font size"),
+        "caster hud font (decrease | smaller | down)":
+            R(Function(decrease_hud_font), rdescript="Decrease HUD font size"),
+        "caster hud font reset":
+            R(Function(reset_hud_font), rdescript="Reset HUD font size to default"),
+        "caster hud save profile":
+            R(Function(save_hud_profile), rdescript="Open Profile Dialog to save current layout"),
+        "caster hud (profile save | profile record)":
+            R(Function(save_hud_profile), rdescript="Open Profile Dialog to save current layout"),
+        "caster hud (load profile | show profile | profile)":
+            R(Function(load_hud_profile), rdescript="Open Profile Dialog to load or manage profiles"),
+        "show caster [hud] profiles":
+            R(Function(load_hud_profile), rdescript="Open Profile Dialog to load or manage profiles"),
     }
+    extras = [
+        Choice("hud_theme", {
+            "classic": "classic",
+            "frosted": "frosted-dark",
+            "dark": "frosted-dark",
+            "minimal": "minimal-transparent",
+            "transparent": "minimal-transparent",
+            "high contrast": "high-contrast",
+            "contrast": "high-contrast",
+        }, default=None),
+    ]
 
 
 def get_rule():
