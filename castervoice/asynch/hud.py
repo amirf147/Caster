@@ -26,11 +26,23 @@ QTextEdit = QtWidgets.QTextEdit
 QTreeView = QtWidgets.QTreeView
 QVBoxLayout = QtWidgets.QVBoxLayout
 QWidget = QtWidgets.QWidget
+QSystemTrayIcon = getattr(QtWidgets, "QSystemTrayIcon", None)
+QMenu = getattr(QtWidgets, "QMenu", None)
+QStyle = QtWidgets.QStyle
+try:
+    QAction = QtGui.QAction
+except AttributeError:
+    QAction = QtWidgets.QAction
 
 WINDOW_STAYS_ON_TOP_HINT = qt_attr(
     QtCore,
     ("Qt", "WindowStaysOnTopHint"),
     ("Qt", "WindowType", "WindowStaysOnTopHint"),
+)
+TOOL_WINDOW_HINT = qt_attr(
+    QtCore,
+    ("Qt", "Tool"),
+    ("Qt", "WindowType", "Tool"),
 )
 TEXT_CURSOR_END = qt_attr(
     QtGui,
@@ -44,6 +56,31 @@ SHOW_HUD_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
 HIDE_RULES_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
 SHOW_RULES_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
 SEND_COMMAND_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
+
+
+def _create_hud_icon(app):
+    """
+    Create a crisp speech/caster icon for the system tray,
+    falling back to standard desktop icon.
+    """
+    try:
+        pixmap = QtGui.QPixmap(32, 32)
+        pixmap.fill(QtCore.Qt.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setBrush(QtGui.QColor(41, 128, 185))
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.drawRoundedRect(2, 2, 28, 28, 6, 6)
+        painter.setPen(QtGui.QColor(255, 255, 255))
+        font = QtGui.QFont("Arial", 14, QtGui.QFont.Bold)
+        painter.setFont(font)
+        painter.drawText(QtCore.QRect(0, 0, 32, 32), QtCore.Qt.AlignCenter, "C")
+        painter.end()
+        return QtGui.QIcon(pixmap)
+    except Exception:
+        if app is not None:
+            return app.style().standardIcon(QStyle.SP_DesktopIcon)
+        return QtGui.QIcon()
 
 
 class RPCEvent(QtCore.QEvent):
@@ -63,7 +100,11 @@ class RulesWindow(QWidget):
     _MARGIN = 30
 
     def __init__(self, text):
-        QWidget.__init__(self, f=WINDOW_STAYS_ON_TOP_HINT)
+        use_tray = settings.settings(["hud", "system_tray"], default_value=False)
+        flags = WINDOW_STAYS_ON_TOP_HINT
+        if use_tray:
+            flags |= TOOL_WINDOW_HINT
+        QWidget.__init__(self, f=flags)
         x = dragonfly.monitors[0].rectangle.dx - (RulesWindow._WIDTH + RulesWindow._MARGIN)
         y = 300
         dx = RulesWindow._WIDTH
@@ -108,7 +149,12 @@ class HUDWindow(QMainWindow):
     _MARGIN = 30
 
     def __init__(self, server):
-        QMainWindow.__init__(self, flags=WINDOW_STAYS_ON_TOP_HINT)
+        settings.initialize()
+        self.use_tray = settings.settings(["hud", "system_tray"], default_value=False)
+        flags = WINDOW_STAYS_ON_TOP_HINT
+        if self.use_tray:
+            flags |= TOOL_WINDOW_HINT
+        QMainWindow.__init__(self, flags=flags)
         x = dragonfly.monitors[0].rectangle.dx - (HUDWindow._WIDTH + HUDWindow._MARGIN)
         y = HUDWindow._MARGIN
         dx = HUDWindow._WIDTH
@@ -122,10 +168,88 @@ class HUDWindow(QMainWindow):
         self.setCentralWidget(self.output)
         self.rules_window = None
         self.commands_count = 0
+        self.tray_icon = None
+        self.toggle_action = None
+        if self.use_tray:
+            self.setup_tray_icon()
+
+    def setup_tray_icon(self):
+        if QSystemTrayIcon is None or not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self.tray_icon = QSystemTrayIcon(self)
+        app = QApplication.instance()
+        icon = _create_hud_icon(app)
+        self.tray_icon.setIcon(icon)
+        self.tray_icon.setToolTip(settings.HUD_TITLE)
+
+        if QMenu is not None:
+            tray_menu = QMenu(self)
+            self.toggle_action = QAction("Hide HUD", self)
+            self.toggle_action.triggered.connect(self.toggle_visibility)
+            tray_menu.addAction(self.toggle_action)
+
+            clear_action = QAction("Clear HUD", self)
+            clear_action.triggered.connect(self.xmlrpc_clear)
+            tray_menu.addAction(clear_action)
+
+            tray_menu.addSeparator()
+
+            exit_action = QAction("Exit", self)
+            exit_action.triggered.connect(self.xmlrpc_kill)
+            tray_menu.addAction(exit_action)
+
+            self.tray_icon.setContextMenu(tray_menu)
+
+        self.tray_icon.activated.connect(self.on_tray_activated)
+        self.tray_icon.show()
+
+    def on_tray_activated(self, reason):
+        trigger_val = qt_attr(
+            QtWidgets,
+            ("QSystemTrayIcon", "Trigger"),
+            ("QSystemTrayIcon", "ActivationReason", "Trigger"),
+        )
+        double_click_val = qt_attr(
+            QtWidgets,
+            ("QSystemTrayIcon", "DoubleClick"),
+            ("QSystemTrayIcon", "ActivationReason", "DoubleClick"),
+        )
+        if reason in (trigger_val, double_click_val):
+            self.toggle_visibility()
+
+    def toggle_visibility(self):
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+        else:
+            self.show_and_raise()
+
+    def show_and_raise(self):
+        self.showNormal()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def showEvent(self, event):
+        if self.toggle_action:
+            self.toggle_action.setText("Hide HUD")
+        QMainWindow.showEvent(self, event)
+
+    def hideEvent(self, event):
+        if self.toggle_action:
+            self.toggle_action.setText("Show HUD")
+        QMainWindow.hideEvent(self, event)
+
+    def changeEvent(self, event):
+        if self.use_tray and event.type() == QtCore.QEvent.WindowStateChange:
+            if self.isMinimized() and self.tray_icon and self.tray_icon.isVisible():
+                QtCore.QTimer.singleShot(0, self.hide)
+                event.accept()
+                return
+        QMainWindow.changeEvent(self, event)
 
     def event(self, event):
         if event.type() == SHOW_HUD_EVENT:
-            self.show()
+            self.show_and_raise()
             return True
         if event.type() == HIDE_HUD_EVENT:
             self.hide()
@@ -162,6 +286,9 @@ class HUDWindow(QMainWindow):
             else:
                 formatted_text = escaped_text
             self.output.append(formatted_text)
+            cursor = self.output.textCursor()
+            cursor.movePosition(TEXT_CURSOR_END)
+            self.output.setTextCursor(cursor)
             self.output.ensureCursorVisible()
             return True
         if event.type() == CLEAR_HUD_EVENT:
@@ -170,6 +297,9 @@ class HUDWindow(QMainWindow):
         return QMainWindow.event(self, event)
 
     def closeEvent(self, event):
+        if self.tray_icon:
+            self.tray_icon.hide()
+        QApplication.quit()
         event.accept()
 
     def setup_xmlrpc_server(self):
@@ -206,6 +336,8 @@ class HUDWindow(QMainWindow):
         return 0
 
     def xmlrpc_kill(self):
+        if self.tray_icon:
+            self.tray_icon.hide()
         QApplication.quit()
 
     def xmlrpc_send(self, text):

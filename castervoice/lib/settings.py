@@ -388,6 +388,11 @@ def _get_defaults():
             "reload_timer_seconds": 5,  # seconds
         },
 
+        # HUD settings
+        "hud": {
+            "system_tray": False,  # Enable to dock HUD into system tray with zero taskbar presence
+        },
+
         "formats": {
             "_default": {
                 "text_format": [5, 0],
