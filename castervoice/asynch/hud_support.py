@@ -1,4 +1,7 @@
-import sys, subprocess, json, time
+import json
+import subprocess
+import sys
+import time
 
 from dragonfly import CompoundRule, MappingRule, get_current_engine, Function
 
@@ -47,6 +50,160 @@ def clear_hud():
         printer.out("Unable to clear hud. Hud not available. \n{}".format(e))
         # clear cmd output if hud unavailable
         Function(utilities.clear_log).execute()
+
+
+def set_hud_theme(hud_theme=None):
+    """
+    Instruct HUD to apply a specific theme stylesheet, or cycle if omitted.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        if hud_theme:
+            hud.set_theme(str(hud_theme))
+        else:
+            hud.cycle_theme()
+    except Exception as e:
+        printer.out("Unable to set hud theme. Hud not available. \n{}".format(e))
+
+
+def cycle_hud_theme():
+    """
+    Cycle HUD through available themes.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.cycle_theme()
+    except Exception as e:
+        printer.out("Unable to cycle hud theme. Hud not available. \n{}".format(e))
+
+
+def toggle_hud_border():
+    """
+    Toggle title bar / frameless overlay mode.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_border()
+    except Exception as e:
+        printer.out("Unable to toggle hud border. Hud not available. \n{}".format(e))
+
+
+def toggle_hud_drag():
+    """
+    Toggle mouse drag mode (locked vs draggable).
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_drag()
+    except Exception as e:
+        printer.out("Unable to toggle hud drag mode. Hud not available. \n{}".format(e))
+
+
+def toggle_hud_scrollbars():
+    """
+    Toggle scrollbar visibility.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_scrollbars()
+    except Exception as e:
+        printer.out("Unable to toggle hud scrollbars. Hud not available. \n{}".format(e))
+
+
+def increase_hud_font():
+    """
+    Increase HUD font size by 1pt.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.font_increase()
+    except Exception as e:
+        printer.out("Unable to increase hud font. Hud not available. \n{}".format(e))
+
+
+def decrease_hud_font():
+    """
+    Decrease HUD font size by 1pt.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.font_decrease()
+    except Exception as e:
+        printer.out("Unable to decrease hud font. Hud not available. \n{}".format(e))
+
+
+def reset_hud_font():
+    """
+    Reset HUD font size to default.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.font_reset()
+    except Exception as e:
+        printer.out("Unable to reset hud font. Hud not available. \n{}".format(e))
+
+
+def save_hud_profile(name=None):
+    """
+    Save current HUD geometry, theme, and styling to named profile,
+    or open interactive Profile Dialog if name is omitted.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        if name:
+            hud.save_profile(str(name))
+        else:
+            hud.show_profile_dialog("save")
+    except Exception as e:
+        printer.out("Unable to save hud profile. Hud not available. \n{}".format(e))
+
+
+def load_hud_profile(name=None):
+    """
+    Load saved HUD geometry, theme, and styling from named profile,
+    or open interactive Profile Dialog if name is omitted.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        if name:
+            hud.load_profile(str(name))
+        else:
+            hud.show_profile_dialog("load")
+    except Exception as e:
+        printer.out("Unable to load hud profile. Hud not available. \n{}".format(e))
+
+
+def show_hud_profile_dialog(mode="save"):
+    """
+    Open the interactive Profile Manager dialog.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.show_profile_dialog(str(mode))
+    except Exception as e:
+        printer.out("Unable to show hud profile dialog. Hud not available. \n{}".format(e))
+
+
+def show_hud_help():
+    """
+    Show the standalone HUD commands and help dialog.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.show_help()
+    except Exception as e:
+        printer.out("Unable to show hud help. Hud not available. \n{}".format(e))
+
+
+def hide_hud_help():
+    """
+    Hide the standalone HUD commands and help dialog.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.hide_help()
+    except Exception as e:
+        printer.out("Unable to hide hud help. Hud not available. \n{}".format(e))
 
 
 def show_rules():

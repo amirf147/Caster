@@ -388,6 +388,17 @@ def _get_defaults():
             "reload_timer_seconds": 5,  # seconds
         },
 
+        # HUD (Heads-Up Display) settings
+        "hud": {
+            "system_tray": False,       # Dock HUD into system tray with zero taskbar presence
+            "theme": "classic",         # "classic", "frosted-dark", "minimal-transparent", "high-contrast"
+            "frameless": False,         # Hide window title bar/borders for floating overlay
+            "font_family": "Segoe UI",  # Font family for HUD display
+            "font_size": 9,             # Base font point size (default 9 matches classic Caster compact styling)
+            "opacity": 1.0,             # Window opacity (0.3 to 1.0)
+            "hide_scrollbars": False,   # Hide vertical scrollbar for ultra-minimal look
+        },
+
         "formats": {
             "_default": {
                 "text_format": [5, 0],
