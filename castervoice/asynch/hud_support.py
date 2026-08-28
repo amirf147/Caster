@@ -4,7 +4,6 @@ import sys
 import time
 
 from dragonfly import CompoundRule, MappingRule, get_current_engine, Function
-
 from pathlib import Path
 
 try:  # Style C -- may be imported into Caster, or externally
@@ -16,6 +15,7 @@ finally:
     
 from castervoice.lib import printer, control, utilities
 from castervoice.lib.rules_collection import get_instance
+
 
 def start_hud():
     hud = control.nexus().comm.get_com("hud")
@@ -43,12 +43,16 @@ def hide_hud():
 
 
 def clear_hud():
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import ClearHistoryEvent
+        get_telemetry_publisher().publish(ClearHistoryEvent())
+    except Exception:
+        pass
     hud = control.nexus().comm.get_com("hud")
     try:
         hud.clear_hud()
-    except Exception as e:
-        printer.out("Unable to clear hud. Hud not available. \n{}".format(e))
-        # clear cmd output if hud unavailable
+    except Exception:
         Function(utilities.clear_log).execute()
 
 
@@ -56,6 +60,13 @@ def set_hud_theme(hud_theme=None):
     """
     Instruct HUD to apply a specific theme stylesheet, or cycle if omitted.
     """
+    if hud_theme:
+        try:
+            from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+            from castervoice.asynch.hud.core.events import ThemeChangeEvent
+            get_telemetry_publisher().publish(ThemeChangeEvent(theme_name=str(hud_theme)))
+        except Exception:
+            pass
     hud = control.nexus().comm.get_com("hud")
     try:
         if hud_theme:
@@ -108,6 +119,297 @@ def toggle_hud_scrollbars():
         hud.toggle_scrollbars()
     except Exception as e:
         printer.out("Unable to toggle hud scrollbars. Hud not available. \n{}".format(e))
+
+
+def toggle_hud_status_bar():
+    """
+    Toggle top status header banner visibility.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_status_bar()
+    except Exception as e:
+        printer.out("Unable to toggle hud status bar. Hud not available. \n{}".format(e))
+
+
+import threading
+
+_FOCUS_TRACKER = None
+_FOCUS_TRACKER_LOCK = threading.Lock()
+
+INTERNAL_RULE_EXCLUSIONS = frozenset([
+    "preparedrule",
+    "repeatrule",
+    "ccr",
+    "ccrmerger",
+    "ccrmerger2",
+    "caster_rule",
+    "casterrule",
+    "caster_mic_rule",
+    "castermicrule",
+    "caster mic modes",
+    "dictationsinkrule",
+    "dictation_sink_rule",
+    "dictationsink",
+])
+
+
+def is_internal_rule_name(name):
+    """Returns True if rule name is an internal merger artifact or private helper."""
+    if not name or str(name).startswith('_'):
+        return True
+    low = str(name).lower().strip().replace(" ", "").replace("_", "")
+    if low in INTERNAL_RULE_EXCLUSIONS:
+        return True
+    if low.startswith("repeater"):
+        return True
+    if low.startswith("g") and low[1:].isdigit():
+        return True
+    return False
+
+
+def get_adce_context(target_process=None):
+    """
+    Safely queries ADCE bridge if connected.
+    Ensures cached zone is only returned if it matches the current target process.
+    """
+    try:
+        from caster_user_content.util.adce_bridge import adce, IDE_PROCESS_NAMES
+        if adce.is_connected():
+            adce_proc = str(adce.get_current_process() or "").lower().strip()
+            target_proc = str(target_process or "").lower().strip()
+
+            # Only return ADCE zone/file if the target process matches the ADCE snapshot process
+            if not target_proc or target_proc == adce_proc or (target_proc in IDE_PROCESS_NAMES and adce_proc in IDE_PROCESS_NAMES):
+                return {
+                    "is_connected": True,
+                    "semantic_zone": adce.get_current_zone(),
+                    "process_name": adce_proc,
+                    "window_title": adce.get_current_title(),
+                    "active_file": adce.get_active_file(),
+                }
+            else:
+                # Process mismatch: native OS focus switched ahead of ADCE poller
+                return {
+                    "is_connected": True,
+                    "semantic_zone": "",
+                    "process_name": target_proc,
+                    "window_title": "",
+                    "active_file": "",
+                }
+    except Exception:
+        pass
+    return {
+        "is_connected": False,
+        "semantic_zone": "",
+        "process_name": "",
+        "window_title": "",
+        "active_file": "",
+    }
+
+
+def _on_window_focus_changed(process_name, window_title, hwnd=0):
+    """Callback executed when native OS window focus switches."""
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import DesktopContextEvent, ActiveRulesEvent
+        active = get_active_contextual_rules(target_process=process_name, target_title=window_title, target_hwnd=hwnd)
+        pub = get_telemetry_publisher()
+
+        adce_ctx = get_adce_context(target_process=process_name)
+        zone = adce_ctx["semantic_zone"] if adce_ctx["is_connected"] else ""
+        active_file = adce_ctx["active_file"] if adce_ctx["is_connected"] else ""
+
+        pub.publish(
+            DesktopContextEvent(
+                process_name=process_name,
+                window_title=window_title,
+                semantic_zone=zone,
+                active_file=active_file,
+                is_connected=adce_ctx["is_connected"],
+            )
+        )
+        pub.publish(ActiveRulesEvent(rules=active))
+    except Exception:
+        pass
+
+
+def _on_adce_context_changed(process_name, window_title, semantic_zone, active_file, is_connected=True):
+    """Real-time callback executed when ADCE emits a sub-window zone transition or active file switch."""
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import DesktopContextEvent, ActiveRulesEvent
+        pub = get_telemetry_publisher()
+        pub.publish(
+            DesktopContextEvent(
+                process_name=process_name,
+                window_title=window_title,
+                semantic_zone=semantic_zone,
+                active_file=active_file,
+                is_connected=is_connected,
+            )
+        )
+        if is_connected and process_name:
+            active = get_active_contextual_rules(target_process=process_name, target_title=window_title)
+            pub.publish(ActiveRulesEvent(rules=active))
+    except Exception:
+        pass
+
+
+def get_focus_tracker():
+    """Returns the global IFocusTracker instance, starting it and ADCE tracker if not yet running."""
+    global _FOCUS_TRACKER
+    if _FOCUS_TRACKER is None:
+        with _FOCUS_TRACKER_LOCK:
+            if _FOCUS_TRACKER is None:
+                from castervoice.asynch.hud.core.window_tracker import create_window_focus_tracker
+                from castervoice.asynch.hud.core.adce_tracker import get_adce_tracker
+                _FOCUS_TRACKER = create_window_focus_tracker(on_focus_changed=_on_window_focus_changed)
+                _FOCUS_TRACKER.start()
+                try:
+                    get_adce_tracker(on_context_changed=_on_adce_context_changed)
+                except Exception:
+                    pass
+    return _FOCUS_TRACKER
+
+
+def get_active_rule_names():
+    """Returns a list of non-private active rule names in the current engine."""
+    rule_names = []
+    engine = get_current_engine()
+    if engine and hasattr(engine, "grammars"):
+        for grammar in engine.grammars:
+            if any([r.active for r in grammar.rules]):
+                for rule in grammar.rules:
+                    if rule.active and not rule.name.startswith('_'):
+                        rule_names.append(rule.name)
+    return rule_names
+
+
+def get_active_contextual_rules(target_process=None, target_title=None, target_hwnd=0):
+    """
+    Returns a list of active application-specific / contextual rule names.
+    If the target window matches application-scoped rules, returns those contextual rules.
+    If only global rules are active, returns an empty list [] (prompting [Global Context] on HUD).
+    """
+    contextual_rules = []
+    seen = set()
+
+    proc_candidates = []
+    if target_process:
+        proc_candidates.append(str(target_process).lower().strip())
+    proc_low = str(target_process or "").lower().strip()
+    title_low = str(target_title or "").lower().strip()
+    if proc_low in ("windowsterminal", "conhost", "cmd", "wt"):
+        if "powershell" in title_low or "pwsh" in title_low:
+            proc_candidates.extend(["powershell", "pwsh"])
+    if proc_low == "pwsh" and "powershell" not in proc_candidates:
+        proc_candidates.append("powershell")
+    if proc_low == "powershell" and "pwsh" not in proc_candidates:
+        proc_candidates.append("pwsh")
+    if not proc_candidates:
+        proc_candidates.append("")
+
+    engine = get_current_engine()
+    if engine and hasattr(engine, "grammars"):
+        for grammar in engine.grammars:
+            ctx = getattr(grammar, "context", None)
+            if ctx is not None:
+                is_match = False
+                for p in proc_candidates:
+                    try:
+                        if ctx.matches(p, target_title or "", target_hwnd or 0):
+                            is_match = True
+                            break
+                    except Exception:
+                        pass
+
+                if not is_match and not target_process:
+                    try:
+                        is_match = ctx.matches()
+                    except Exception:
+                        is_match = any(r.active for r in grammar.rules)
+
+                if is_match:
+                    for rule in grammar.rules:
+                        r_name = str(rule.name).strip()
+                        if r_name.lower().startswith("repeater") or r_name == "RepeatRule":
+                            execs = getattr(ctx, "_executable", None)
+                            if execs and isinstance(execs, (list, tuple, set)) and len(execs) > 0:
+                                r_name = str(list(execs)[0]).capitalize()
+
+                        if not is_internal_rule_name(r_name):
+                            if r_name and r_name not in seen:
+                                seen.add(r_name)
+                                contextual_rules.append(r_name)
+
+    return contextual_rules
+
+
+def toggle_hud_rules_bar():
+    """
+    Toggle active contextual rules tag strip visibility.
+    """
+    get_focus_tracker()
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import ActiveRulesEvent
+        active = get_active_contextual_rules()
+        get_telemetry_publisher().publish(ActiveRulesEvent(rules=active))
+    except Exception:
+        pass
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_rules_bar()
+    except Exception as e:
+        printer.out("Unable to toggle hud rules bar. Hud not available. \n{}".format(e))
+
+
+def toggle_hud_adce():
+    """
+    Toggle ADCE dynamic context strip visibility.
+    """
+    get_focus_tracker()
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import DesktopContextEvent
+        adce_ctx = get_adce_context()
+        get_telemetry_publisher().publish(
+            DesktopContextEvent(
+                process_name=adce_ctx["process_name"] if adce_ctx["is_connected"] else "",
+                window_title=adce_ctx["window_title"] if adce_ctx["is_connected"] else "",
+                semantic_zone=adce_ctx["semantic_zone"] if adce_ctx["is_connected"] else "",
+                active_file=adce_ctx["active_file"] if adce_ctx["is_connected"] else "",
+                is_connected=adce_ctx["is_connected"],
+            )
+        )
+    except Exception:
+        pass
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_adce()
+    except Exception as e:
+        printer.out("Unable to toggle hud adce strip. Hud not available. \n{}".format(e))
+
+
+def toggle_hud_verbose():
+    """
+    Toggle verbose diagnostic panels (Status Header + Active Contextual Rules Strip).
+    Note: ADCE strip is managed separately via toggle_hud_adce.
+    """
+    get_focus_tracker()
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import ActiveRulesEvent
+        active = get_active_contextual_rules()
+        get_telemetry_publisher().publish(ActiveRulesEvent(rules=active))
+    except Exception:
+        pass
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.toggle_verbose()
+    except Exception as e:
+        printer.out("Unable to toggle hud verbose mode. Hud not available. \n{}".format(e))
 
 
 def increase_hud_font():
@@ -213,30 +515,42 @@ def show_rules():
     to HUD GUI for display.
     """
     grammars = []
+    rule_names = []
     engine = get_current_engine()
-    for grammar in engine.grammars:
-        if any([r.active for r in grammar.rules]):
-            rules = []
-            for rule in grammar.rules:
-                if rule.active and not rule.name.startswith('_'):
-                    if isinstance(rule, CompoundRule):
-                        specs = [rule.spec]
-                    elif isinstance(rule, MappingRule):
-                        specs = sorted(["{}::{}".format(x, rule._mapping[x]) for x in rule._mapping])
-                    else:
-                        specs = [rule.element.gstring()]
-                    rules.append({
-                        "name": rule.name,
-                        "exported": rule.exported,
-                        "specs": specs
-                    })
-            grammars.append({"name": grammar.name, "rules": rules})
-    grammars.extend(get_instance().serialize())
+    if engine and hasattr(engine, "grammars"):
+        for grammar in engine.grammars:
+            if any([r.active for r in grammar.rules]):
+                rules = []
+                for rule in grammar.rules:
+                    if rule.active and not rule.name.startswith('_'):
+                        rule_names.append(rule.name)
+                        if isinstance(rule, CompoundRule):
+                            specs = [rule.spec]
+                        elif isinstance(rule, MappingRule):
+                            specs = sorted(["{}::{}".format(x, rule._mapping[x]) for x in rule._mapping])
+                        else:
+                            specs = [rule.element.gstring()]
+                        rules.append({
+                            "name": rule.name,
+                            "exported": rule.exported,
+                            "specs": specs
+                        })
+                grammars.append({"name": grammar.name, "rules": rules})
+        grammars.extend(get_instance().serialize())
+
+    try:
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        from castervoice.asynch.hud.core.events import ActiveRulesEvent
+        get_telemetry_publisher().publish(ActiveRulesEvent(rules=rule_names))
+    except Exception:
+        pass
+
     hud = control.nexus().comm.get_com("hud")
     try:
         hud.show_rules(json.dumps(grammars))
     except Exception as e:
         printer.out("Unable to show hud. Hud not available. \n{}".format(e)) 
+
 
 def hide_rules():
     """
@@ -251,8 +565,8 @@ def hide_rules():
 
 class HudPrintMessageHandler(printer.BaseMessageHandler):
     """
-    Hud message handler which prints formatted messages to the gui Hud. 
-    Add symbols as the 1st character in strings utilizing printer.out
+    Asynchronous, non-blocking HUD message handler.
+    Dispatches formatted recognition telemetry via in-memory queue with zero speech loop delay.
     
     @ Purple arrow - Bold Text - Important Info
     # Red arrow - Plain text - Caster Info
@@ -261,38 +575,25 @@ class HudPrintMessageHandler(printer.BaseMessageHandler):
 
     def __init__(self):
         super(HudPrintMessageHandler, self).__init__()
-        self.hud = control.nexus().comm.get_com("hud")
-        self.is_hud_active = False
-        
-        if get_current_engine().name != "text":
-            # Retry loop to handle the cold-boot race condition
-            max_retries = 10
-            for attempt in range(max_retries):
-                try:
-                    self.hud.ping() # HUD running?
-                    self.is_hud_active = True
-                    break # Connection successful, break out of loop
-                except Exception as e:
-                    if attempt < max_retries - 1:
-                        time.sleep(0.5) # Wait 500ms before next attempt
-                    else:
-                        # Log failure if it still won't connect after 5 seconds
-                        self.is_hud_active = False
-                        printer.out("Hud not available after {} retries. \n{}".format(max_retries, e))
+        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+        self._publisher = get_telemetry_publisher()
+        try:
+            get_focus_tracker()
+        except Exception:
+            pass
 
     def handle_message(self, items):
-        if self.is_hud_active is True:
-            # The timeout with the hud can interfere with the dragonfly speech recognition loop.
-            # This appears as a stutter in recognition.
-            # This stutter only happens to end user once, while self.hud.ping() is executing.
-            # is_hud_active is False if the hud is not available/text engine
-            # TODO: handle raising exception gracefully
-            try:
-                self.hud.send("\n".join([str(m) for m in items]))
-            except Exception as e:
-                # If an exception, print is managed by SimplePrintMessageHandler
-                self.is_hud_active = False
-                printer.out("Hud not available. \n{}".format(e))
-                raise("") # pylint: disable=raising-bad-type
-        else:
-            raise("") # pylint: disable=raising-bad-type
+        from castervoice.asynch.hud.core.events import RecognitionEvent
+        for item in items:
+            text = str(item)
+            kind = "cmd"
+            if text.startswith('$'):
+                text = text[1:].strip()
+                kind = "cmd"
+            elif text.startswith('@'):
+                text = text[1:].strip()
+                kind = "sys"
+            elif text.startswith('#'):
+                text = text[1:].strip()
+                kind = "err"
+            self._publisher.publish(RecognitionEvent(phrase=text, kind=kind))

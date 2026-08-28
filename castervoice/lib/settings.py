@@ -393,10 +393,15 @@ def _get_defaults():
             "system_tray": False,       # Dock HUD into system tray with zero taskbar presence
             "theme": "classic",         # "classic", "frosted-dark", "minimal-transparent", "high-contrast"
             "frameless": False,         # Hide window title bar/borders for floating overlay
+            "status_border": True,      # Dynamic Green (Listening) / Red (Sleeping) / Blue (Focused) border
+            "show_status_bar": False,   # Show expanded header status pill (default false for ultra-compact)
+            "show_active_rules": False, # Show active rules strip (default false for ultra-compact)
+            "show_context": False,      # Show active application/context banner (default false)
             "font_family": "Segoe UI",  # Font family for HUD display
             "font_size": 9,             # Base font point size (default 9 matches classic Caster compact styling)
             "opacity": 1.0,             # Window opacity (0.3 to 1.0)
             "hide_scrollbars": False,   # Hide vertical scrollbar for ultra-minimal look
+            "max_history_lines": 50,    # Number of recognition log entries to retain
         },
 
         "formats": {

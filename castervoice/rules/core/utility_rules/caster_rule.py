@@ -15,6 +15,10 @@ from castervoice.asynch.hud_support import (
     toggle_hud_border,
     toggle_hud_drag,
     toggle_hud_scrollbars,
+    toggle_hud_status_bar,
+    toggle_hud_rules_bar,
+    toggle_hud_adce,
+    toggle_hud_verbose,
     increase_hud_font,
     decrease_hud_font,
     reset_hud_font,
@@ -79,6 +83,23 @@ class CasterRule(MappingRule):
             R(Function(toggle_hud_drag), rdescript="Toggle HUD mouse drag mode"),
         "caster hud scroll [toggle]":
             R(Function(toggle_hud_scrollbars), rdescript="Toggle HUD scrollbars"),
+        # Modular Diagnostic Panels & Strip Toggles
+        "[caster hud] verbose [toggle]":
+            R(Function(toggle_hud_verbose), rdescript="Toggle HUD verbose diagnostic panels (Status Header + Rules Strip)"),
+        "toggle [caster hud] verbose":
+            R(Function(toggle_hud_verbose), rdescript="Toggle HUD verbose diagnostic panels (Status Header + Rules Strip)"),
+        "[caster hud] (status | header | status bar) [toggle]":
+            R(Function(toggle_hud_status_bar), rdescript="Toggle HUD top status banner"),
+        "toggle [caster hud] (status | header | status bar)":
+            R(Function(toggle_hud_status_bar), rdescript="Toggle HUD top status banner"),
+        "[caster hud] (rules strip | active rules [strip] | rules bar | active rules) [toggle]":
+            R(Function(toggle_hud_rules_bar), rdescript="Toggle HUD active rules tag strip"),
+        "toggle [caster hud] (active rules [strip] | rules strip | rules bar)":
+            R(Function(toggle_hud_rules_bar), rdescript="Toggle HUD active rules tag strip"),
+        "[caster hud] (adce | a d c e | context engine | dynamic context) [strip] [toggle]":
+            R(Function(toggle_hud_adce), rdescript="Toggle HUD ADCE dynamic context strip"),
+        "toggle [caster hud] (adce | a d c e | context engine | dynamic context) [strip]":
+            R(Function(toggle_hud_adce), rdescript="Toggle HUD ADCE dynamic context strip"),
         "caster hud font (increase | bigger | up)":
             R(Function(increase_hud_font), rdescript="Increase HUD font size"),
         "caster hud font (decrease | smaller | down)":

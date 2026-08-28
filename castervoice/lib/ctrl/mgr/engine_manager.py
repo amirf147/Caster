@@ -45,6 +45,12 @@ class EngineModesManager(object):
         """
         if mode in self.mic_modes:
             self.mic_state = mode
+            try:
+                from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
+                from castervoice.asynch.hud.core.events import MicStateEvent
+                get_telemetry_publisher().publish(MicStateEvent(mode=mode))
+            except Exception:
+                pass
             if self.engine == 'natlink':
                 if natlink is not None:
                     natlink.setMicState(mode)
