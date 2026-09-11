@@ -39,10 +39,12 @@ class WindowManagementRule(MappingRule):
         "move work [space] <n>":
             R(Function(virtual_desktops.move_current_window_to_desktop, follow=True)),
 
-        # Window and App pinning across workspaces
-        "([toggle] pin | unpin) [this] window [all work [spaces]]":
+        # Window and Application pinning across workspaces
+        "([toggle] pin | unpin) window [all work [spaces]]":
             R(Function(virtual_desktops.toggle_pin_current_window)),
-        "([toggle] pin | unpin) [this] app [all work [spaces]]":
+        "window ([toggle] pin | unpin) [all work [spaces]]":
+            R(Function(virtual_desktops.toggle_pin_current_window)),
+        "([toggle] pin | unpin) [this] application [all work [spaces]]":
             R(Function(virtual_desktops.toggle_pin_current_app)),
     }
 
