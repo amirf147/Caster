@@ -208,17 +208,51 @@ def get_adce_context(target_process=None):
     }
 
 
+def _sync_adce_bridge(zone=None, process=None, title=None, active_file=None, is_connected=None):
+    """
+    Synchronously updates adce_bridge state in-memory so Dragonfly FuncContext
+    predicates evaluate against the fresh active context without awaiting poller round-trips.
+    """
+    try:
+        from caster_user_content.util.adce_bridge import adce
+        if zone is not None:
+            adce._current_zone = zone
+        if process is not None:
+            adce._current_process = str(process).lower().strip()
+        if title is not None:
+            adce._current_title = str(title).strip()
+        if active_file is not None:
+            adce._active_file = str(active_file).strip()
+        if is_connected is not None:
+            adce._is_connected = bool(is_connected)
+        adce._last_update_time = time.time()
+    except Exception:
+        pass
+
+
 def _on_window_focus_changed(process_name, window_title, hwnd=0):
     """Callback executed when native OS window focus switches."""
     try:
         from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
         from castervoice.asynch.hud.core.events import DesktopContextEvent, ActiveRulesEvent
-        active = get_active_contextual_rules(target_process=process_name, target_title=window_title, target_hwnd=hwnd)
-        pub = get_telemetry_publisher()
 
+        # 1. Synchronize ADCE bridge immediately if target process switched away from IDE
+        try:
+            from caster_user_content.util.adce_bridge import IDE_PROCESS_NAMES
+            proc_low = str(process_name or "").lower().strip()
+            if proc_low and not any(ide in proc_low for ide in IDE_PROCESS_NAMES):
+                _sync_adce_bridge(zone="", process=process_name, title=window_title)
+        except Exception:
+            pass
+
+        # 2. Query matching ADCE context
         adce_ctx = get_adce_context(target_process=process_name)
         zone = adce_ctx["semantic_zone"] if adce_ctx["is_connected"] else ""
         active_file = adce_ctx["active_file"] if adce_ctx["is_connected"] else ""
+
+        # 3. Evaluate active contextual rules and publish
+        active = get_active_contextual_rules(target_process=process_name, target_title=window_title, target_hwnd=hwnd)
+        pub = get_telemetry_publisher()
 
         pub.publish(
             DesktopContextEvent(
@@ -239,6 +273,16 @@ def _on_adce_context_changed(process_name, window_title, semantic_zone, active_f
     try:
         from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
         from castervoice.asynch.hud.core.events import DesktopContextEvent, ActiveRulesEvent
+
+        # 1. Update ADCE bridge immediately so all in-memory predicates see the new zone right now
+        _sync_adce_bridge(
+            zone=semantic_zone,
+            process=process_name,
+            title=window_title,
+            active_file=active_file,
+            is_connected=is_connected,
+        )
+
         pub = get_telemetry_publisher()
         pub.publish(
             DesktopContextEvent(
@@ -307,6 +351,10 @@ def get_active_contextual_rules(target_process=None, target_title=None, target_h
         proc_candidates.append("powershell")
     if proc_low == "powershell" and "pwsh" not in proc_candidates:
         proc_candidates.append("pwsh")
+    if proc_low in ("code", "antigravity", "antigravity ide", "cursor", "windsurf", "vscodium", "code - oss"):
+        for ide in ("code", "antigravity", "antigravity ide", "cursor", "windsurf", "vscodium", "code - oss"):
+            if ide not in proc_candidates:
+                proc_candidates.append(ide)
     if not proc_candidates:
         proc_candidates.append("")
 
