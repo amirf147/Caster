@@ -18,6 +18,7 @@ from castervoice.asynch.hud.core.events import (
     WindowFocusEvent,
     DragModeEvent,
     ThemeChangeEvent,
+    OpacityChangeEvent,
     ClearHistoryEvent,
     HeartbeatEvent,
 )
@@ -71,6 +72,9 @@ def reduce_event(state, event):
 
     elif isinstance(event, ThemeChangeEvent):
         return state.clone(theme=event.theme_name)
+
+    elif isinstance(event, OpacityChangeEvent):
+        return state.clone(opacity=max(0.1, min(1.0, float(event.opacity))))
 
     elif isinstance(event, ClearHistoryEvent):
         return state.clone(history=())

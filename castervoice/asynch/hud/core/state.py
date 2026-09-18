@@ -27,14 +27,20 @@ class LogEntry(object):
     def formatted_html(self, theme_name="classic"):
         """Format entry as HTML with color-coded directional arrow."""
         escaped = html_escape(self.text)
+        try:
+            from castervoice.asynch.hud.theming.theme_manager import ThemeManager
+            colors = ThemeManager.get_theme_colors(theme_name)
+        except Exception:
+            colors = {}
+
         if self.kind == "cmd":
-            col = "blue" if theme_name == "classic" else constants.COLOR_TEXT_CMD
+            col = colors.get("cmd_color", "blue" if theme_name == "classic" else constants.COLOR_TEXT_CMD)
             return '<font color="{0}">&lt;</font><b>{1}</b>'.format(col, escaped)
         elif self.kind == "sys":
-            col = "purple" if theme_name == "classic" else constants.COLOR_TEXT_SYS
+            col = colors.get("sys_color", "purple" if theme_name == "classic" else constants.COLOR_TEXT_SYS)
             return '<font color="{0}">&gt;</font><b>{1}</b>'.format(col, escaped)
         else:
-            col = "red" if theme_name == "classic" else constants.COLOR_TEXT_ERR
+            col = colors.get("err_color", "red" if theme_name == "classic" else constants.COLOR_TEXT_ERR)
             return '<font color="{0}">&gt;</font>{1}'.format(col, escaped)
 
     def __repr__(self):

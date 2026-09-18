@@ -39,6 +39,7 @@ from castervoice.asynch.hud.ui.interactions.tray_manager import TrayManager
 from castervoice.asynch.hud.ui.dialogs.profile_dialog import ProfileDialog
 from castervoice.asynch.hud.ui.dialogs.help_dialog import HelpDialog
 from castervoice.asynch.hud.ui.dialogs.rules_tree_dialog import RulesTreeDialog
+from castervoice.asynch.hud.ui.dialogs.theme_dialog import ThemeCustomizerDialog
 
 WINDOW_STAYS_ON_TOP_HINT = qt_attr(QtCore, ("Qt", "WindowStaysOnTopHint"), ("Qt", "WindowType", "WindowStaysOnTopHint"))
 TOOL_WINDOW_HINT = qt_attr(QtCore, ("Qt", "Tool"), ("Qt", "WindowType", "Tool"))
@@ -155,6 +156,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.profile_dialog = None
         self.help_dialog = None
         self.rules_dialog = None
+        self.theme_dialog = None
 
         # System Tray Manager
         self.tray_manager = TrayManager(
@@ -242,6 +244,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.rules_dialog.setStyleSheet(stylesheet)
         if self.profile_dialog and self.profile_dialog.isVisible():
             self.profile_dialog.setStyleSheet(stylesheet)
+        if self.theme_dialog and self.theme_dialog.isVisible():
+            self.theme_dialog.setStyleSheet(stylesheet)
 
         # Re-render history entries with new theme colors
         if self.state.history:
@@ -376,6 +380,25 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.show_and_raise()
 
+    def set_opacity(self, opacity):
+        """Sets the HUD window opacity between 0.1 and 1.0."""
+        val = max(0.1, min(1.0, float(opacity)))
+        self.state = self.state.clone(opacity=val)
+        self.setWindowOpacity(val)
+
+    def show_theme_dialog(self):
+        """Opens the interactive Theme Customizer and appearance settings dialog."""
+        if self.theme_dialog is None:
+            self.theme_dialog = ThemeCustomizerDialog(
+                self,
+                theme_name=self.state.theme,
+                use_tray=self.config.get("system_tray", False),
+            )
+        else:
+            self.theme_dialog.refresh_state(self.state.theme, self.state.opacity)
+            self.theme_dialog.setStyleSheet(ThemeManager.get_stylesheet(self.state.theme))
+        self.theme_dialog.show_dialog()
+
     def show_profile_dialog(self, mode="save"):
         if self.profile_dialog is None:
             self.profile_dialog = ProfileDialog(self, self.profile_mgr, theme_name=self.state.theme,
@@ -444,6 +467,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if "theme" in data:
             self.apply_theme(data["theme"])
+        if "opacity" in data:
+            self.set_opacity(data["opacity"])
         if "frameless" in data and data["frameless"] != self.state.frameless:
             self.state = self.state.clone(frameless=data["frameless"])
             self.border_controller.set_frameless(data["frameless"])
@@ -504,12 +529,10 @@ class MainWindow(QtWidgets.QMainWindow):
         scroll_act.triggered.connect(self.toggle_scrollbars)
         panel_menu.addAction(scroll_act)
 
-        # Themes Submenu
-        theme_menu = menu.addMenu("Themes")
-        for th in ThemeManager.get_available_themes():
-            act = QAction(th.replace("-", " ").title(), self)
-            act.triggered.connect(lambda checked=False, t=th: self.apply_theme(t))
-            theme_menu.addAction(act)
+        # Customize / Themes
+        theme_act = QAction("Customize / Themes...", self)
+        theme_act.triggered.connect(self.show_theme_dialog)
+        menu.addAction(theme_act)
 
         # Profiles Submenu
         profile_menu = menu.addMenu("Profiles")

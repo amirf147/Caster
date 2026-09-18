@@ -59,6 +59,8 @@ class SignalBridge(QtCore.QObject):
     save_profile_requested = QtCore.Signal(str)
     load_profile_requested = QtCore.Signal(str)
     show_profile_dialog_requested = QtCore.Signal(str)
+    show_theme_dialog_requested = QtCore.Signal()
+    set_opacity_requested = QtCore.Signal(float)
     set_theme_requested = QtCore.Signal(str)
     cycle_theme_requested = QtCore.Signal()
     clear_hud_requested = QtCore.Signal()
@@ -101,6 +103,8 @@ def main():
     bridge.save_profile_requested.connect(window.save_named_profile)
     bridge.load_profile_requested.connect(window.load_named_profile)
     bridge.show_profile_dialog_requested.connect(window.show_profile_dialog)
+    bridge.show_theme_dialog_requested.connect(window.show_theme_dialog)
+    bridge.set_opacity_requested.connect(window.set_opacity)
     bridge.set_theme_requested.connect(window.apply_theme)
     bridge.cycle_theme_requested.connect(window.cycle_theme)
     bridge.clear_hud_requested.connect(window.clear_history)
@@ -213,6 +217,14 @@ def _setup_xmlrpc_methods(server, bridge):
         bridge.show_profile_dialog_requested.emit(str(mode))
         return 0
 
+    def _do_show_theme_dialog():
+        bridge.show_theme_dialog_requested.emit()
+        return 0
+
+    def _do_set_opacity(opacity=1.0):
+        bridge.set_opacity_requested.emit(float(opacity))
+        return 0
+
     def _do_show_help():
         bridge.show_help_requested.emit()
         return 0
@@ -258,6 +270,9 @@ def _setup_xmlrpc_methods(server, bridge):
     server.register_function(_do_save_profile, "save_profile")
     server.register_function(_do_load_profile, "load_profile")
     server.register_function(_do_show_profile_dialog, "show_profile_dialog")
+    server.register_function(_do_show_theme_dialog, "show_theme_dialog")
+    server.register_function(_do_show_theme_dialog, "show_customizer")
+    server.register_function(_do_set_opacity, "set_opacity")
     server.register_function(_do_show_help, "show_help")
     server.register_function(_do_hide_help, "hide_help")
     server.register_function(_do_show_rules, "show_rules")

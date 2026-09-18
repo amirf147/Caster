@@ -132,6 +132,20 @@ class ThemeChangeEvent(HudEvent):
         return d
 
 
+class OpacityChangeEvent(HudEvent):
+    """Fired when HUD window transparency / opacity is adjusted."""
+    event_type = "opacity_change"
+
+    def __init__(self, opacity=1.0, timestamp=None):
+        HudEvent.__init__(self, timestamp)
+        self.opacity = float(opacity)
+
+    def to_dict(self):
+        d = HudEvent.to_dict(self)
+        d["opacity"] = self.opacity
+        return d
+
+
 class ClearHistoryEvent(HudEvent):
     """Fired to clear on-screen telemetry log."""
     event_type = "clear_history"
@@ -172,6 +186,7 @@ EVENT_TYPE_MAP = {
     "window_focus": lambda d: WindowFocusEvent(is_focused=d.get("is_focused", False), timestamp=d.get("timestamp")),
     "drag_mode": lambda d: DragModeEvent(is_drag_mode=d.get("is_drag_mode", False), timestamp=d.get("timestamp")),
     "theme_change": lambda d: ThemeChangeEvent(theme_name=d.get("theme_name", "classic"), timestamp=d.get("timestamp")),
+    "opacity_change": lambda d: OpacityChangeEvent(opacity=d.get("opacity", 1.0), timestamp=d.get("timestamp")),
     "clear_history": lambda d: ClearHistoryEvent(timestamp=d.get("timestamp")),
     "heartbeat": lambda d: HeartbeatEvent(engine_name=d.get("engine_name", ""), timestamp=d.get("timestamp")),
 }

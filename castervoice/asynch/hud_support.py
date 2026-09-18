@@ -534,6 +534,28 @@ def show_hud_profile_dialog(mode="save"):
         printer.out("Unable to show hud profile dialog. Hud not available. \n{}".format(e))
 
 
+def show_hud_theme_dialog():
+    """
+    Open the interactive Theme Customizer and appearance settings dialog.
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.show_theme_dialog()
+    except Exception as e:
+        printer.out("Unable to show hud theme dialog. Hud not available. \n{}".format(e))
+
+
+def set_hud_opacity(opacity=1.0):
+    """
+    Set HUD window transparency / opacity (0.1 to 1.0).
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.set_opacity(float(opacity))
+    except Exception as e:
+        printer.out("Unable to set hud opacity. Hud not available. \n{}".format(e))
+
+
 def show_hud_help():
     """
     Show the standalone HUD commands and help dialog.

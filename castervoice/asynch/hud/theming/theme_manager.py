@@ -299,11 +299,171 @@ PRESET_THEMES = {
     """,
 }
 
+BUILTIN_THEME_DATA = {
+    THEME_CLASSIC: {
+        "name": "Classic",
+        "background_color": "#f0f0f0",
+        "textedit_bg": "#ffffff",
+        "text_color": "#000000",
+        "accent_color": "#3498db",
+        "border_color": "#cccccc",
+        "cmd_color": "blue",
+        "sys_color": "purple",
+        "err_color": "red",
+        "opacity": 1.0,
+    },
+    THEME_FROSTED: {
+        "name": "Frosted Dark",
+        "background_color": "#1e1e24",
+        "textedit_bg": "#18181c",
+        "text_color": "#f8f9fa",
+        "accent_color": "#2563eb",
+        "border_color": "#3b3b4a",
+        "cmd_color": "#3498db",
+        "sys_color": "#9b59b6",
+        "err_color": "#e74c3c",
+        "opacity": 0.95,
+    },
+    THEME_MINIMAL: {
+        "name": "Minimal Transparent",
+        "background_color": "#111111",
+        "textedit_bg": "#000000",
+        "text_color": "#e0e0e0",
+        "accent_color": "#2563eb",
+        "border_color": "#333333",
+        "cmd_color": "#93c5fd",
+        "sys_color": "#c084fc",
+        "err_color": "#f87171",
+        "opacity": 0.85,
+    },
+    THEME_HIGH_CONTRAST: {
+        "name": "High Contrast",
+        "background_color": "#000000",
+        "textedit_bg": "#000000",
+        "text_color": "#ffffff",
+        "accent_color": "#ffffff",
+        "border_color": "#ffffff",
+        "cmd_color": "#00ffff",
+        "sys_color": "#ffff00",
+        "err_color": "#ff0000",
+        "opacity": 1.0,
+    },
+}
+
+CUSTOM_THEMES_FILE = os.path.expanduser("~/.caster/hud_custom_themes.json")
+
+
+def build_stylesheet(data):
+    """
+    Generates a full Qt QSS stylesheet string dynamically from a theme data dictionary.
+    """
+    bg = data.get("background_color", "#1e1e24")
+    txt_bg = data.get("textedit_bg", bg)
+    txt = data.get("text_color", "#f8f9fa")
+    accent = data.get("accent_color", "#2563eb")
+    border = data.get("border_color", "#3b3b4a")
+
+    return """
+        QMainWindow, QWidget {{
+            background-color: {bg};
+            color: {txt};
+        }}
+        QTextEdit {{
+            background-color: {txt_bg};
+            color: {txt};
+            border: none;
+            border-radius: 0px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            min-height: 0px;
+            margin: 0px;
+        }}
+        QTreeView, QListWidget {{
+            background-color: {txt_bg};
+            color: {txt};
+            border: 1px solid {border};
+            selection-background-color: {accent};
+            selection-color: #ffffff;
+        }}
+        QHeaderView::section {{
+            background-color: {border};
+            color: {accent};
+            padding: 4px;
+            border: 1px solid {border};
+            font-weight: bold;
+        }}
+        QPushButton {{
+            background-color: {border};
+            color: {txt};
+            border: 1px solid {border};
+            padding: 4px 10px;
+            border-radius: 3px;
+        }}
+        QPushButton:hover {{
+            background-color: {accent};
+            color: #ffffff;
+        }}
+        QLineEdit {{
+            background-color: {txt_bg};
+            color: {txt};
+            border: 1px solid {border};
+            padding: 3px;
+        }}
+        QMenu {{
+            background-color: {bg};
+            color: {txt};
+            border: 1px solid {border};
+            padding: 4px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9pt;
+        }}
+        QMenu::item {{
+            background-color: transparent;
+            padding: 5px 24px 5px 12px;
+            border-radius: 2px;
+        }}
+        QMenu::item:selected {{
+            background-color: {accent};
+            color: #ffffff;
+        }}
+        QMenu::separator {{
+            height: 1px;
+            background-color: {border};
+            margin: 4px 6px;
+        }}
+        QScrollBar:vertical {{
+            border: none;
+            background: transparent;
+            width: 8px;
+            margin: 0px;
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {border};
+            min-height: 20px;
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {accent};
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+    """.format(bg=bg, txt_bg=txt_bg, txt=txt, accent=accent, border=border)
+
 
 class ThemeManager(object):
     """
-    Manages HUD appearance themes and loads QSS stylesheets.
+    Manages HUD appearance themes, user-created palettes, and QSS stylesheets.
     """
+
+    _custom_themes_cache = None
+    _custom_file_path = CUSTOM_THEMES_FILE
+
+    @classmethod
+    def set_custom_file_path(cls, path):
+        """Allows test suites to override the custom themes file location."""
+        cls._custom_file_path = path
+        cls._custom_themes_cache = None
 
     @classmethod
     def normalize_theme_name(cls, theme_name):
@@ -311,15 +471,152 @@ class ThemeManager(object):
         if not theme_name:
             return THEME_CLASSIC
         cleaned = str(theme_name).lower().strip()
-        return THEME_ALIASES.get(cleaned, THEME_CLASSIC)
+        if cleaned in THEME_ALIASES:
+            return THEME_ALIASES[cleaned]
+        customs = cls.load_custom_themes()
+        for k in customs.keys():
+            if k.lower() == cleaned:
+                return k
+        return cleaned
+
+    @classmethod
+    def is_builtin_theme(cls, theme_name):
+        """Returns True if theme is one of the built-in presets."""
+        norm = cls.normalize_theme_name(theme_name)
+        return norm in BUILTIN_THEME_DATA
+
+    @classmethod
+    def load_custom_themes(cls):
+        """Loads and returns all user-created custom themes dictionary."""
+        if cls._custom_themes_cache is not None:
+            return cls._custom_themes_cache
+
+        cls._custom_themes_cache = {}
+        if os.path.isfile(cls._custom_file_path):
+            try:
+                import json
+                with open(cls._custom_file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        cls._custom_themes_cache = data
+            except Exception:
+                cls._custom_themes_cache = {}
+
+        return cls._custom_themes_cache
+
+    @classmethod
+    def save_custom_theme(cls, name, theme_data):
+        """
+        Saves or updates a custom theme configuration.
+        """
+        customs = cls.load_custom_themes()
+        theme_id = str(name).strip().lower().replace(" ", "-")
+        data = dict(theme_data)
+        data["name"] = str(name).strip()
+        customs[theme_id] = data
+        cls._custom_themes_cache = customs
+
+        try:
+            import json
+            dir_name = os.path.dirname(cls._custom_file_path)
+            if dir_name and not os.path.exists(dir_name):
+                os.makedirs(dir_name, exist_ok=True)
+            with open(cls._custom_file_path, "w", encoding="utf-8") as f:
+                json.dump(customs, f, indent=2)
+        except Exception:
+            pass
+
+        return theme_id
+
+    @classmethod
+    def delete_custom_theme(cls, name):
+        """Deletes a custom theme (built-in themes cannot be deleted)."""
+        if cls.is_builtin_theme(name):
+            return False
+
+        theme_id = cls.normalize_theme_name(name)
+        customs = cls.load_custom_themes()
+        if theme_id in customs:
+            del customs[theme_id]
+            cls._custom_themes_cache = customs
+            try:
+                import json
+                with open(cls._custom_file_path, "w", encoding="utf-8") as f:
+                    json.dump(customs, f, indent=2)
+            except Exception:
+                pass
+            return True
+        return False
+
+    @classmethod
+    def get_theme_data(cls, theme_name):
+        """
+        Returns structured dictionary of theme colors and properties.
+        """
+        norm = cls.normalize_theme_name(theme_name)
+        if norm in BUILTIN_THEME_DATA:
+            return dict(BUILTIN_THEME_DATA[norm])
+
+        customs = cls.load_custom_themes()
+        if norm in customs:
+            return dict(customs[norm])
+
+        # Fallback
+        return dict(BUILTIN_THEME_DATA[THEME_CLASSIC])
+
+    @classmethod
+    def get_theme_colors(cls, theme_name):
+        """
+        Returns history text colors (cmd_color, sys_color, err_color).
+        """
+        data = cls.get_theme_data(theme_name)
+        return {
+            "cmd_color": data.get("cmd_color", "#3498db"),
+            "sys_color": data.get("sys_color", "#9b59b6"),
+            "err_color": data.get("err_color", "#e74c3c"),
+        }
 
     @classmethod
     def get_stylesheet(cls, theme_name):
         """Returns the complete QSS stylesheet string for the requested theme."""
         norm = cls.normalize_theme_name(theme_name)
+        if norm in PRESET_THEMES:
+            return PRESET_THEMES[norm]
+
+        customs = cls.load_custom_themes()
+        if norm in customs:
+            return build_stylesheet(customs[norm])
+
+        # Check optional external .qss file in ~/.caster/themes/<name>.qss
+        external_path = os.path.expanduser("~/.caster/themes/{0}.qss".format(norm))
+        if os.path.isfile(external_path):
+            try:
+                with open(external_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception:
+                pass
+
         return PRESET_THEMES.get(norm, PRESET_THEMES[THEME_CLASSIC])
 
     @classmethod
     def get_available_themes(cls):
-        """Returns a list of all canonical theme names."""
-        return [THEME_CLASSIC, THEME_FROSTED, THEME_MINIMAL, THEME_HIGH_CONTRAST]
+        """Returns a list of all canonical theme names (built-in and custom)."""
+        themes = [THEME_CLASSIC, THEME_FROSTED, THEME_MINIMAL, THEME_HIGH_CONTRAST]
+        customs = cls.load_custom_themes()
+        for k in sorted(customs.keys()):
+            if k not in themes:
+                themes.append(k)
+
+        # External .qss themes
+        themes_dir = os.path.expanduser("~/.caster/themes")
+        if os.path.isdir(themes_dir):
+            try:
+                for fname in sorted(os.listdir(themes_dir)):
+                    if fname.endswith(".qss"):
+                        stem = os.path.splitext(fname)[0]
+                        if stem not in themes:
+                            themes.append(stem)
+            except Exception:
+                pass
+
+        return themes

@@ -24,6 +24,7 @@ from castervoice.asynch.hud_support import (
     reset_hud_font,
     save_hud_profile,
     load_hud_profile,
+    show_hud_theme_dialog,
     show_hud_help,
     hide_hud_help,
 )
@@ -77,6 +78,10 @@ class CasterRule(MappingRule):
             R(Function(show_hud_help), rdescript="Show standalone HUD commands and help dialog"),
         "caster hud theme [<hud_theme>]":
             R(Function(set_hud_theme), rdescript="Set or cycle HUD theme"),
+        "show caster [hud] (customize | themes | customizer)":
+            R(Function(show_hud_theme_dialog), rdescript="Open HUD Customize and Themes dialog"),
+        "caster hud (customize | themes | customizer)":
+            R(Function(show_hud_theme_dialog), rdescript="Open HUD Customize and Themes dialog"),
         "caster hud (border | title bar | frame) [toggle]":
             R(Function(toggle_hud_border), rdescript="Toggle HUD title bar / frameless overlay"),
         "caster hud (drag | move) [toggle]":

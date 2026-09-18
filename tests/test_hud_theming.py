@@ -1,0 +1,127 @@
+"""
+Unit tests for Caster HUD Theme Manager, Custom Themes Engine, and QSS Generation.
+"""
+
+import os
+import shutil
+import tempfile
+import unittest
+from castervoice.asynch.hud.theming.theme_manager import (
+    ThemeManager,
+    THEME_CLASSIC,
+    THEME_FROSTED,
+    THEME_MINIMAL,
+    THEME_HIGH_CONTRAST,
+    build_stylesheet,
+)
+
+
+class TestHudTheming(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(prefix="caster_test_themes_")
+        self.custom_file = os.path.join(self.test_dir, "hud_custom_themes.json")
+        ThemeManager.set_custom_file_path(self.custom_file)
+
+    def tearDown(self):
+        ThemeManager.set_custom_file_path(os.path.expanduser("~/.caster/hud_custom_themes.json"))
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_available_themes_includes_builtins(self):
+        available = ThemeManager.get_available_themes()
+        self.assertIn(THEME_CLASSIC, available)
+        self.assertIn(THEME_FROSTED, available)
+        self.assertIn(THEME_MINIMAL, available)
+        self.assertIn(THEME_HIGH_CONTRAST, available)
+
+    def test_builtin_theme_identification(self):
+        self.assertTrue(ThemeManager.is_builtin_theme("classic"))
+        self.assertTrue(ThemeManager.is_builtin_theme("frosted-dark"))
+        self.assertTrue(ThemeManager.is_builtin_theme("frosted"))
+        self.assertFalse(ThemeManager.is_builtin_theme("custom-neon"))
+
+    def test_get_builtin_theme_data_and_colors(self):
+        classic_data = ThemeManager.get_theme_data(THEME_CLASSIC)
+        self.assertEqual(classic_data["background_color"], "#f0f0f0")
+        self.assertEqual(classic_data["textedit_bg"], "#ffffff")
+        self.assertEqual(classic_data["text_color"], "#000000")
+
+        classic_colors = ThemeManager.get_theme_colors(THEME_CLASSIC)
+        self.assertEqual(classic_colors["cmd_color"], "blue")
+        self.assertEqual(classic_colors["sys_color"], "purple")
+        self.assertEqual(classic_colors["err_color"], "red")
+
+        frosted_data = ThemeManager.get_theme_data(THEME_FROSTED)
+        self.assertEqual(frosted_data["background_color"], "#1e1e24")
+        self.assertEqual(frosted_data["opacity"], 0.95)
+
+    def test_save_and_load_custom_theme(self):
+        custom_data = {
+            "name": "Cyberpunk Neon",
+            "background_color": "#0a0a12",
+            "textedit_bg": "#12121e",
+            "text_color": "#00ffcc",
+            "accent_color": "#ff007f",
+            "border_color": "#331144",
+            "cmd_color": "#00ffcc",
+            "sys_color": "#ff007f",
+            "err_color": "#ff3333",
+            "opacity": 0.88,
+        }
+
+        theme_id = ThemeManager.save_custom_theme("Cyberpunk Neon", custom_data)
+        self.assertEqual(theme_id, "cyberpunk-neon")
+
+        # Verify it appears in available themes
+        available = ThemeManager.get_available_themes()
+        self.assertIn("cyberpunk-neon", available)
+
+        # Verify get_theme_data
+        loaded = ThemeManager.get_theme_data("cyberpunk-neon")
+        self.assertEqual(loaded["name"], "Cyberpunk Neon")
+        self.assertEqual(loaded["text_color"], "#00ffcc")
+        self.assertEqual(loaded["accent_color"], "#ff007f")
+        self.assertEqual(loaded["opacity"], 0.88)
+
+        # Verify stylesheet generation contains the custom colors
+        stylesheet = ThemeManager.get_stylesheet("cyberpunk-neon")
+        self.assertIn("#0a0a12", stylesheet)
+        self.assertIn("#00ffcc", stylesheet)
+        self.assertIn("#ff007f", stylesheet)
+
+    def test_delete_custom_theme(self):
+        custom_data = {
+            "name": "Temporary Theme",
+            "background_color": "#111111",
+            "text_color": "#eeeeee",
+        }
+        theme_id = ThemeManager.save_custom_theme("Temporary Theme", custom_data)
+        self.assertIn(theme_id, ThemeManager.get_available_themes())
+
+        deleted = ThemeManager.delete_custom_theme(theme_id)
+        self.assertTrue(deleted)
+        self.assertNotIn(theme_id, ThemeManager.get_available_themes())
+
+    def test_cannot_delete_builtin_theme(self):
+        self.assertFalse(ThemeManager.delete_custom_theme(THEME_CLASSIC))
+        self.assertFalse(ThemeManager.delete_custom_theme(THEME_FROSTED))
+        self.assertIn(THEME_CLASSIC, ThemeManager.get_available_themes())
+
+    def test_build_stylesheet_helper(self):
+        data = {
+            "background_color": "#202020",
+            "textedit_bg": "#181818",
+            "text_color": "#f0f0f0",
+            "accent_color": "#00aaee",
+            "border_color": "#404040",
+        }
+        css = build_stylesheet(data)
+        self.assertIn("background-color: #202020", css)
+        self.assertIn("background-color: #181818", css)
+        self.assertIn("color: #f0f0f0", css)
+        self.assertIn("border: 1px solid #404040", css)
+        self.assertIn("selection-background-color: #00aaee", css)
+
+
+if __name__ == "__main__":
+    unittest.main()

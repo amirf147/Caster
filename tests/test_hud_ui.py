@@ -66,6 +66,25 @@ class TestHudUI(unittest.TestCase):
         window.profile_dialog.close()
         self.app.processEvents()
 
+        # Test Show Theme Customizer Dialog & Opacity
+        window.set_opacity(0.85)
+        self.app.processEvents()
+        self.assertEqual(window.state.opacity, 0.85)
+
+        window.show_theme_dialog()
+        self.app.processEvents()
+        self.assertIsNotNone(window.theme_dialog)
+        self.assertTrue(window.theme_dialog.isVisible())
+        self.assertGreaterEqual(window.theme_dialog.theme_combo.count(), 4)
+
+        # Test slider live interaction
+        window.theme_dialog.opacity_slider.setValue(75)
+        self.app.processEvents()
+        self.assertEqual(window.state.opacity, 0.75)
+
+        window.theme_dialog.close()
+        self.app.processEvents()
+
         window.close()
         self.app.processEvents()
 
@@ -77,8 +96,9 @@ class TestHudUI(unittest.TestCase):
         self.assertIn("show caster hud", rule_class.mapping)
         self.assertIn("show caster rules", rule_class.mapping)
         self.assertIn("show caster [hud] help", rule_class.mapping)
-        self.assertIn("caster hud (status | header | verbose) [toggle]", rule_class.mapping)
-        self.assertIn("caster hud (rules strip | active rules) [toggle]", rule_class.mapping)
+        self.assertIn("show caster [hud] (customize | themes | customizer)", rule_class.mapping)
+        self.assertIn("[caster hud] (status | header | status bar) [toggle]", rule_class.mapping)
+        self.assertIn("[caster hud] (rules strip | active rules [strip] | rules bar | active rules) [toggle]", rule_class.mapping)
 
 
 if __name__ == "__main__":
