@@ -39,7 +39,43 @@ class TelemetryLogWidget(QtWidgets.QTextEdit):
         self.setSizePolicy(ignored_policy, ignored_policy)
         self._custom_border_css = ""
         self._current_theme = "classic"
+        self._text_alignment = "left"
         self._entry_count = 0
+
+    def set_text_alignment(self, alignment):
+        """Sets text alignment ('left' or 'right') dynamically across all blocks."""
+        align_str = "right" if str(alignment).lower() == "right" else "left"
+        self._text_alignment = align_str
+        align_flag = (
+            qt_attr(QtCore, ("Qt", "AlignRight"), ("Qt", "AlignmentFlag", "AlignRight"))
+            if align_str == "right"
+            else qt_attr(QtCore, ("Qt", "AlignLeft"), ("Qt", "AlignmentFlag", "AlignLeft"))
+        )
+
+        cursor = QtGui.QTextCursor(self.document())
+        cursor.select(QtGui.QTextCursor.Document)
+        bf = QtGui.QTextBlockFormat()
+        bf.setAlignment(align_flag)
+        cursor.mergeBlockFormat(bf)
+
+        opt = self.document().defaultTextOption()
+        opt.setAlignment(align_flag)
+        self.document().setDefaultTextOption(opt)
+        self.scroll_to_end()
+
+    def _append_formatted(self, html_snippet):
+        """Appends formatted HTML entry ensuring paragraph alignment is applied."""
+        align_flag = (
+            qt_attr(QtCore, ("Qt", "AlignRight"), ("Qt", "AlignmentFlag", "AlignRight"))
+            if getattr(self, "_text_alignment", "left") == "right"
+            else qt_attr(QtCore, ("Qt", "AlignLeft"), ("Qt", "AlignmentFlag", "AlignLeft"))
+        )
+        html_to_insert = '<div align="{0}">{1}</div>'.format(self._text_alignment, html_snippet)
+        if self.document().isEmpty():
+            self.setHtml(html_to_insert)
+        else:
+            self.append(html_to_insert)
+        self.setAlignment(align_flag)
 
     def set_border_style(self, border_css):
         """Updates border style dynamically."""
@@ -52,24 +88,21 @@ class TelemetryLogWidget(QtWidgets.QTextEdit):
         self._current_theme = theme_name
         self.clear()
         for entry in history:
-            self.append(entry.formatted_html(theme_name))
+            self._append_formatted(entry.formatted_html(theme_name))
         self.scroll_to_end()
 
     def append_entry(self, entry, theme_name="classic"):
         """Appends a single new entry and scrolls to bottom."""
         self._current_theme = theme_name
         formatted = entry.formatted_html(theme_name)
-        if self._entry_count == 0:
-            self.setHtml(formatted)
-        else:
-            self.append(formatted)
+        self._append_formatted(formatted)
         self._entry_count = (self._entry_count + 1) % 50
         self.scroll_to_end()
 
     def append_system_text(self, text, theme_name="classic"):
         """Helper to append system/informational messages."""
         entry = LogEntry(text=text, kind="sys")
-        self.append(entry.formatted_html(theme_name))
+        self._append_formatted(entry.formatted_html(theme_name))
         self.scroll_to_end()
 
     def scroll_to_end(self):

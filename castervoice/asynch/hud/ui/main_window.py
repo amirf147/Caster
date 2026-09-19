@@ -110,6 +110,7 @@ class MainWindow(QtWidgets.QMainWindow):
         container.setFrameShape(QtWidgets.QFrame.StyledPanel)
         container.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         container.setMinimumSize(0, 0)
+        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
         self._container = container
         self._root_layout = QtWidgets.QVBoxLayout()
         self._root_layout.setContentsMargins(0, 0, 0, 0)
@@ -228,12 +229,23 @@ class MainWindow(QtWidgets.QMainWindow):
         # Update Dynamic Border
         self.border_controller.update_state(self.state)
 
-    def apply_theme(self, theme_name):
+    def apply_theme(self, theme_name, background_opacity=None, text_opacity=None, text_alignment=None):
         """Applies QSS theme stylesheet preserving exact client geometry and propagates to dialogs."""
         norm_theme = ThemeManager.normalize_theme_name(theme_name)
         x, y, w, h = self.x(), self.y(), self.width(), self.height()
+        theme_data = ThemeManager.get_theme_data(norm_theme)
+        bg_op = background_opacity if background_opacity is not None else theme_data.get("background_opacity", self.state.background_opacity)
+        txt_op = text_opacity if text_opacity is not None else theme_data.get("text_opacity", self.state.text_opacity)
+        align = text_alignment if text_alignment is not None else theme_data.get("text_alignment", self.state.text_alignment)
         self.state = reduce_event(self.state, ThemeChangeEvent(theme_name=norm_theme))
-        stylesheet = ThemeManager.get_stylesheet(norm_theme)
+        self.state = self.state.clone(
+            background_opacity=float(bg_op),
+            text_opacity=float(txt_op),
+            text_alignment=str(align),
+        )
+        if hasattr(self, "log_widget"):
+            self.log_widget.set_text_alignment(align)
+        stylesheet = ThemeManager.get_stylesheet(norm_theme, background_opacity=bg_op, text_opacity=txt_op)
         self.setStyleSheet(stylesheet)
         self.setGeometry(x, y, w, h)
 
@@ -386,6 +398,37 @@ class MainWindow(QtWidgets.QMainWindow):
         self.state = self.state.clone(opacity=val)
         self.setWindowOpacity(val)
 
+    def set_background_opacity(self, opacity):
+        """Sets the HUD background opacity between 0.0 and 1.0."""
+        val = max(0.0, min(1.0, float(opacity)))
+        self.state = self.state.clone(background_opacity=val)
+        stylesheet = ThemeManager.get_stylesheet(
+            self.state.theme,
+            background_opacity=val,
+            text_opacity=self.state.text_opacity,
+        )
+        self.setStyleSheet(stylesheet)
+
+    def set_text_opacity(self, opacity):
+        """Sets the HUD letters/text opacity between 0.1 and 1.0."""
+        val = max(0.1, min(1.0, float(opacity)))
+        self.state = self.state.clone(text_opacity=val)
+        stylesheet = ThemeManager.get_stylesheet(
+            self.state.theme,
+            background_opacity=self.state.background_opacity,
+            text_opacity=val,
+        )
+        self.setStyleSheet(stylesheet)
+        if self.state.history:
+            self.log_widget.update_history(self.state.history, self.state.theme)
+
+    def set_text_alignment(self, alignment):
+        """Sets the HUD text alignment to 'left' or 'right'."""
+        val = "right" if str(alignment).lower() == "right" else "left"
+        self.state = self.state.clone(text_alignment=val)
+        if hasattr(self, "log_widget"):
+            self.log_widget.set_text_alignment(val)
+
     def show_theme_dialog(self):
         """Opens the interactive Theme Customizer and appearance settings dialog."""
         if self.theme_dialog is None:
@@ -395,7 +438,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 use_tray=self.config.get("system_tray", False),
             )
         else:
-            self.theme_dialog.refresh_state(self.state.theme, self.state.opacity)
+            self.theme_dialog.refresh_state(
+                self.state.theme,
+                background_opacity=self.state.background_opacity,
+                text_opacity=self.state.text_opacity,
+                text_alignment=self.state.text_alignment,
+            )
             self.theme_dialog.setStyleSheet(ThemeManager.get_stylesheet(self.state.theme))
         self.theme_dialog.show_dialog()
 
@@ -450,6 +498,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "theme": self.state.theme,
             "frameless": self.state.frameless,
             "opacity": self.state.opacity,
+            "background_opacity": self.state.background_opacity,
+            "text_opacity": self.state.text_opacity,
+            "text_alignment": self.state.text_alignment,
         }
         self.profile_mgr.save_profile(name, profile_data)
         self.log_widget.append_system_text("Profile Saved: '{0}'".format(name), self.state.theme)
@@ -469,6 +520,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.apply_theme(data["theme"])
         if "opacity" in data:
             self.set_opacity(data["opacity"])
+        if "background_opacity" in data:
+            self.set_background_opacity(data["background_opacity"])
+        if "text_opacity" in data:
+            self.set_text_opacity(data["text_opacity"])
+        if "text_alignment" in data:
+            self.set_text_alignment(data["text_alignment"])
         if "frameless" in data and data["frameless"] != self.state.frameless:
             self.state = self.state.clone(frameless=data["frameless"])
             self.border_controller.set_frameless(data["frameless"])
@@ -481,6 +538,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def reset_to_default_profile(self):
         self.setGeometry(100, 100, constants.DEFAULT_HUD_WIDTH, constants.DEFAULT_HUD_HEIGHT)
         self.apply_theme(constants.DEFAULT_HUD_CONFIG["theme"])
+        self.set_text_alignment("left")
         self.log_widget.append_system_text("Default Profile Reset", self.state.theme)
 
     def show_context_menu(self, pos):
@@ -533,6 +591,20 @@ class MainWindow(QtWidgets.QMainWindow):
         theme_act = QAction("Customize / Themes...", self)
         theme_act.triggered.connect(self.show_theme_dialog)
         menu.addAction(theme_act)
+
+        # Text Alignment Submenu
+        align_menu = menu.addMenu("Text Alignment")
+        left_act = QAction("Left Aligned", self)
+        left_act.setCheckable(True)
+        left_act.setChecked(self.state.text_alignment == "left")
+        left_act.triggered.connect(lambda: self.set_text_alignment("left"))
+        align_menu.addAction(left_act)
+
+        right_act = QAction("Right Aligned", self)
+        right_act.setCheckable(True)
+        right_act.setChecked(self.state.text_alignment == "right")
+        right_act.triggered.connect(lambda: self.set_text_alignment("right"))
+        align_menu.addAction(right_act)
 
         # Profiles Submenu
         profile_menu = menu.addMenu("Profiles")

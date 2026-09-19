@@ -125,29 +125,64 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
         colors_box.setLayout(colors_grid)
         root_layout.addWidget(colors_box)
 
-        # 4. Transparency / Opacity Slider
-        trans_box = QtWidgets.QGroupBox("HUD Window Transparency")
+        # 4. Transparency & Opacity Sliders (Background & Letter/Text)
+        trans_box = QtWidgets.QGroupBox("HUD Transparency & Opacity")
         trans_layout = QtWidgets.QVBoxLayout()
+        trans_layout.setSpacing(8)
 
-        trans_header_row = QtWidgets.QHBoxLayout()
-        trans_header_row.addWidget(QtWidgets.QLabel("Window Opacity:"))
-        self.opacity_label = QtWidgets.QLabel("100%")
-        self.opacity_label.setAlignment(qt_attr(QtCore, ("Qt", "AlignRight"), ("Qt", "AlignmentFlag", "AlignRight")))
-        trans_header_row.addWidget(self.opacity_label)
-        trans_layout.addLayout(trans_header_row)
+        # Background Opacity Slider
+        bg_header_row = QtWidgets.QHBoxLayout()
+        bg_header_row.addWidget(QtWidgets.QLabel("Background Opacity:"))
+        self.bg_opacity_label = QtWidgets.QLabel("100%")
+        self.bg_opacity_label.setAlignment(qt_attr(QtCore, ("Qt", "AlignRight"), ("Qt", "AlignmentFlag", "AlignRight")))
+        bg_header_row.addWidget(self.bg_opacity_label)
+        trans_layout.addLayout(bg_header_row)
 
-        self.opacity_slider = QtWidgets.QSlider(HORIZONTAL_ORIENTATION)
-        self.opacity_slider.setRange(20, 100)
-        self.opacity_slider.setSingleStep(5)
-        self.opacity_slider.setPageStep(10)
-        self.opacity_slider.setValue(100)
-        self.opacity_slider.valueChanged.connect(self._on_opacity_slider_changed)
-        trans_layout.addWidget(self.opacity_slider)
+        self.bg_opacity_slider = QtWidgets.QSlider(HORIZONTAL_ORIENTATION)
+        self.bg_opacity_slider.setRange(10, 100)
+        self.bg_opacity_slider.setSingleStep(5)
+        self.bg_opacity_slider.setPageStep(10)
+        self.bg_opacity_slider.setValue(100)
+        self.bg_opacity_slider.valueChanged.connect(self._on_bg_opacity_slider_changed)
+        trans_layout.addWidget(self.bg_opacity_slider)
+
+        # Letter / Text Opacity Slider
+        text_header_row = QtWidgets.QHBoxLayout()
+        text_header_row.addWidget(QtWidgets.QLabel("Letter / Text Opacity:"))
+        self.text_opacity_label = QtWidgets.QLabel("100%")
+        self.text_opacity_label.setAlignment(qt_attr(QtCore, ("Qt", "AlignRight"), ("Qt", "AlignmentFlag", "AlignRight")))
+        text_header_row.addWidget(self.text_opacity_label)
+        trans_layout.addLayout(text_header_row)
+
+        self.text_opacity_slider = QtWidgets.QSlider(HORIZONTAL_ORIENTATION)
+        self.text_opacity_slider.setRange(10, 100)
+        self.text_opacity_slider.setSingleStep(5)
+        self.text_opacity_slider.setPageStep(10)
+        self.text_opacity_slider.setValue(100)
+        self.text_opacity_slider.valueChanged.connect(self._on_text_opacity_slider_changed)
+        trans_layout.addWidget(self.text_opacity_slider)
+
+        # Backwards compatibility alias
+        self.opacity_slider = self.bg_opacity_slider
+        self.opacity_label = self.bg_opacity_label
 
         trans_box.setLayout(trans_layout)
         root_layout.addWidget(trans_box)
 
-        # 5. Bottom Action Buttons Bar
+        # 5. Text Alignment Selection
+        align_box = QtWidgets.QGroupBox("HUD Text Alignment")
+        align_layout = QtWidgets.QHBoxLayout()
+        self.align_left_radio = QtWidgets.QRadioButton("Left Aligned")
+        self.align_right_radio = QtWidgets.QRadioButton("Right Aligned")
+        self.align_left_radio.setChecked(True)
+        self.align_left_radio.toggled.connect(self._on_alignment_radio_toggled)
+        self.align_right_radio.toggled.connect(self._on_alignment_radio_toggled)
+        align_layout.addWidget(self.align_left_radio)
+        align_layout.addWidget(self.align_right_radio)
+        align_box.setLayout(align_layout)
+        root_layout.addWidget(align_box)
+
+        # 6. Bottom Action Buttons Bar
         btn_row = QtWidgets.QHBoxLayout()
 
         self.save_btn = QtWidgets.QPushButton("Save Theme [Enter]")
@@ -172,8 +207,11 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
 
         # Initial populate
         self._populate_themes_combo(select_theme=theme_name)
-        initial_opacity = getattr(main_window.state, "opacity", 1.0)
-        self._set_opacity_ui(initial_opacity)
+        initial_bg = getattr(main_window.state, "background_opacity", getattr(main_window.state, "opacity", 1.0))
+        initial_txt = getattr(main_window.state, "text_opacity", 1.0)
+        self._set_opacity_ui(bg_opacity=initial_bg, text_opacity=initial_txt)
+        initial_align = getattr(main_window.state, "text_alignment", "left")
+        self._set_alignment_ui(initial_align)
 
     def _populate_themes_combo(self, select_theme=None):
         """Populate the themes dropdown with built-ins and custom palettes."""
@@ -214,9 +252,11 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
             self._color_edits[key].setText(val)
             self._update_swatch(key, val)
 
-        theme_opacity = data.get("opacity")
-        if theme_opacity is not None:
-            self._set_opacity_ui(float(theme_opacity))
+        bg_op = data.get("background_opacity", data.get("opacity", 1.0))
+        txt_op = data.get("text_opacity", 1.0)
+        self._set_opacity_ui(bg_opacity=float(bg_op), text_opacity=float(txt_op))
+        align = data.get("text_alignment", "left")
+        self._set_alignment_ui(align)
 
         self._is_updating_ui = False
 
@@ -230,11 +270,33 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
                 )
             )
 
-    def _set_opacity_ui(self, opacity):
-        """Sets slider and text label from float opacity (0.1 to 1.0)."""
-        pct = max(20, min(100, int(round(opacity * 100))))
-        self.opacity_slider.setValue(pct)
-        self.opacity_label.setText("{0}%".format(pct))
+    def _set_opacity_ui(self, bg_opacity=None, text_opacity=None):
+        """Sets sliders and text labels for background and letter opacity."""
+        if bg_opacity is not None:
+            pct_bg = max(10, min(100, int(round(float(bg_opacity) * 100))))
+            self.bg_opacity_slider.setValue(pct_bg)
+            self.bg_opacity_label.setText("{0}%".format(pct_bg))
+        if text_opacity is not None:
+            pct_txt = max(10, min(100, int(round(float(text_opacity) * 100))))
+            self.text_opacity_slider.setValue(pct_txt)
+            self.text_opacity_label.setText("{0}%".format(pct_txt))
+
+    def _set_alignment_ui(self, alignment="left"):
+        """Sets the active text alignment radio button ('left' or 'right')."""
+        is_right = str(alignment).lower() == "right"
+        self.align_right_radio.setChecked(is_right)
+        self.align_left_radio.setChecked(not is_right)
+
+    def _get_alignment_ui(self):
+        """Returns currently selected text alignment ('left' or 'right')."""
+        return "right" if self.align_right_radio.isChecked() else "left"
+
+    def _on_alignment_radio_toggled(self, checked):
+        """Applies alignment change live on HUD when radio button is selected."""
+        if not self._is_updating_ui and checked:
+            align = self._get_alignment_ui()
+            if hasattr(self.main_window, "set_text_alignment"):
+                self.main_window.set_text_alignment(align)
 
     def _pick_color(self, key):
         """Opens QColorDialog to choose color visually."""
@@ -254,12 +316,25 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
             self._update_swatch(key, cleaned)
             self._live_preview()
 
-    def _on_opacity_slider_changed(self, value):
-        """Adjusts opacity in real-time on HUD window."""
-        self.opacity_label.setText("{0}%".format(value))
+    def _on_bg_opacity_slider_changed(self, value):
+        """Adjusts background opacity in real-time on HUD window."""
+        self.bg_opacity_label.setText("{0}%".format(value))
         opacity = value / 100.0
-        if hasattr(self.main_window, "set_opacity"):
-            self.main_window.set_opacity(opacity)
+        self._live_preview()
+        if hasattr(self.main_window, "set_background_opacity"):
+            self.main_window.set_background_opacity(opacity)
+
+    def _on_text_opacity_slider_changed(self, value):
+        """Adjusts letter/text opacity in real-time on HUD window."""
+        self.text_opacity_label.setText("{0}%".format(value))
+        opacity = value / 100.0
+        self._live_preview()
+        if hasattr(self.main_window, "set_text_opacity"):
+            self.main_window.set_text_opacity(opacity)
+
+    def _on_opacity_slider_changed(self, value):
+        """Backwards compatibility proxy for single slider calls."""
+        self._on_bg_opacity_slider_changed(value)
 
     def _on_theme_combo_changed(self, index):
         """Fires when user chooses a different theme in the dropdown."""
@@ -301,10 +376,15 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
                 self.main_window.apply_theme(fallback)
 
     def _collect_form_data(self):
-        """Gathers colors and opacity into a theme dictionary."""
+        """Gathers colors, opacities, and alignment into a theme dictionary."""
+        bg_op = self.bg_opacity_slider.value() / 100.0
+        txt_op = self.text_opacity_slider.value() / 100.0
         data = {
             "name": self.name_edit.text().strip() or "Custom Theme",
-            "opacity": self.opacity_slider.value() / 100.0,
+            "background_opacity": bg_op,
+            "text_opacity": txt_op,
+            "opacity": bg_op,
+            "text_alignment": self._get_alignment_ui(),
         }
         for key, _ in COLOR_KEYS:
             val = self._color_edits[key].text().strip()
@@ -323,8 +403,12 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
     def _do_apply(self):
         """Applies current settings without necessarily saving to a file."""
         self._live_preview()
-        if hasattr(self.main_window, "set_opacity"):
-            self.main_window.set_opacity(self.opacity_slider.value() / 100.0)
+        if hasattr(self.main_window, "set_background_opacity"):
+            self.main_window.set_background_opacity(self.bg_opacity_slider.value() / 100.0)
+        if hasattr(self.main_window, "set_text_opacity"):
+            self.main_window.set_text_opacity(self.text_opacity_slider.value() / 100.0)
+        if hasattr(self.main_window, "set_text_alignment"):
+            self.main_window.set_text_alignment(self._get_alignment_ui())
 
     def _do_save(self):
         """Saves current palette as a custom theme and applies it permanently."""
@@ -342,9 +426,18 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
 
         # Apply to main window
         if hasattr(self.main_window, "apply_theme"):
-            self.main_window.apply_theme(saved_id)
-        if hasattr(self.main_window, "set_opacity"):
-            self.main_window.set_opacity(data["opacity"])
+            self.main_window.apply_theme(
+                saved_id,
+                background_opacity=data["background_opacity"],
+                text_opacity=data["text_opacity"],
+                text_alignment=data["text_alignment"],
+            )
+        if hasattr(self.main_window, "set_background_opacity"):
+            self.main_window.set_background_opacity(data["background_opacity"])
+        if hasattr(self.main_window, "set_text_opacity"):
+            self.main_window.set_text_opacity(data["text_opacity"])
+        if hasattr(self.main_window, "set_text_alignment"):
+            self.main_window.set_text_alignment(data["text_alignment"])
 
         if hasattr(self.main_window, "log_widget"):
             self.main_window.log_widget.append_system_text(
@@ -360,12 +453,14 @@ class ThemeCustomizerDialog(QtWidgets.QWidget):
             if hasattr(self.main_window, "apply_theme"):
                 self.main_window.apply_theme(theme_id)
 
-    def refresh_state(self, theme_name=None, opacity=None):
+    def refresh_state(self, theme_name=None, background_opacity=None, text_opacity=None, text_alignment=None, opacity=None):
         """Refreshes the dialog fields when re-opened."""
         if theme_name:
             self._populate_themes_combo(select_theme=theme_name)
-        if opacity is not None:
-            self._set_opacity_ui(float(opacity))
+        bg = background_opacity if background_opacity is not None else opacity
+        self._set_opacity_ui(bg_opacity=bg, text_opacity=text_opacity)
+        if text_alignment is not None:
+            self._set_alignment_ui(text_alignment)
         self.setStyleSheet(ThemeManager.get_stylesheet(self._current_theme_id))
 
     def show_dialog(self):

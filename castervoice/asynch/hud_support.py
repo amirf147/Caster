@@ -556,6 +556,40 @@ def set_hud_opacity(opacity=1.0):
         printer.out("Unable to set hud opacity. Hud not available. \n{}".format(e))
 
 
+def set_hud_background_opacity(opacity=1.0):
+    """
+    Set HUD background transparency / opacity (0.0 to 1.0).
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.set_background_opacity(float(opacity))
+    except Exception as e:
+        printer.out("Unable to set hud background opacity. Hud not available. \n{}".format(e))
+
+
+def set_hud_letter_opacity(opacity=1.0):
+    """
+    Set HUD letter / text transparency / opacity (0.1 to 1.0).
+    """
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.set_text_opacity(float(opacity))
+    except Exception as e:
+        printer.out("Unable to set hud letter opacity. Hud not available. \n{}".format(e))
+
+
+def set_hud_text_alignment(alignment="left", hud_alignment=None):
+    """
+    Set HUD telemetry text alignment ('left' or 'right').
+    """
+    align = hud_alignment if hud_alignment is not None else alignment
+    hud = control.nexus().comm.get_com("hud")
+    try:
+        hud.set_text_alignment(str(align))
+    except Exception as e:
+        printer.out("Unable to set hud text alignment. Hud not available. \n{}".format(e))
+
+
 def show_hud_help():
     """
     Show the standalone HUD commands and help dialog.

@@ -71,16 +71,39 @@ class TestHudUI(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(window.state.opacity, 0.85)
 
+        window.set_background_opacity(0.60)
+        self.app.processEvents()
+        self.assertEqual(window.state.background_opacity, 0.60)
+
+        window.set_text_opacity(0.80)
+        self.app.processEvents()
+        self.assertEqual(window.state.text_opacity, 0.80)
+
         window.show_theme_dialog()
         self.app.processEvents()
         self.assertIsNotNone(window.theme_dialog)
         self.assertTrue(window.theme_dialog.isVisible())
         self.assertGreaterEqual(window.theme_dialog.theme_combo.count(), 4)
 
-        # Test slider live interaction
-        window.theme_dialog.opacity_slider.setValue(75)
+        # Test dual sliders live interaction
+        window.theme_dialog.bg_opacity_slider.setValue(50)
         self.app.processEvents()
-        self.assertEqual(window.state.opacity, 0.75)
+        self.assertEqual(window.state.background_opacity, 0.50)
+
+        window.theme_dialog.text_opacity_slider.setValue(70)
+        self.app.processEvents()
+        self.assertEqual(window.state.text_opacity, 0.70)
+
+        # Test text alignment live interaction
+        window.theme_dialog.align_right_radio.setChecked(True)
+        self.app.processEvents()
+        self.assertEqual(window.state.text_alignment, "right")
+        self.assertEqual(window.log_widget._text_alignment, "right")
+
+        window.theme_dialog.align_left_radio.setChecked(True)
+        self.app.processEvents()
+        self.assertEqual(window.state.text_alignment, "left")
+        self.assertEqual(window.log_widget._text_alignment, "left")
 
         window.theme_dialog.close()
         self.app.processEvents()
@@ -96,6 +119,7 @@ class TestHudUI(unittest.TestCase):
         self.assertIn("show caster hud", rule_class.mapping)
         self.assertIn("show caster rules", rule_class.mapping)
         self.assertIn("show caster [hud] help", rule_class.mapping)
+        self.assertIn("caster hud [text] align <hud_alignment>", rule_class.mapping)
         self.assertIn("show caster [hud] (customize | themes | customizer)", rule_class.mapping)
         self.assertIn("[caster hud] (status | header | status bar) [toggle]", rule_class.mapping)
         self.assertIn("[caster hud] (rules strip | active rules [strip] | rules bar | active rules) [toggle]", rule_class.mapping)

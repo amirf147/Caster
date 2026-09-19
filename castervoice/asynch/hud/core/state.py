@@ -87,7 +87,9 @@ class HudState(object):
     def __init__(self, mic_mode="on", is_drag_mode=False, is_focused=False,
                  engine_connected=True, last_heartbeat=None, voice=None,
                  desktop_context=None, history=None, max_history=50,
-                 theme="classic", frameless=False, opacity=1.0, config=None):
+                 theme="classic", frameless=False, opacity=1.0,
+                 background_opacity=None, text_opacity=1.0,
+                 text_alignment="left", config=None):
         self.mic_mode = str(mic_mode)
         self.is_drag_mode = bool(is_drag_mode)
         self.is_focused = bool(is_focused)
@@ -102,6 +104,9 @@ class HudState(object):
         self.theme = str(theme)
         self.frameless = bool(frameless)
         self.opacity = float(opacity)
+        self.background_opacity = float(background_opacity if background_opacity is not None else opacity)
+        self.text_opacity = float(text_opacity)
+        self.text_alignment = "right" if str(text_alignment).lower() == "right" else "left"
         self.config = config if config is not None else constants.merge_hud_config()
 
     def get_border_color(self):
@@ -142,5 +147,8 @@ class HudState(object):
             theme=kwargs.get("theme", self.theme),
             frameless=kwargs.get("frameless", self.frameless),
             opacity=kwargs.get("opacity", self.opacity),
+            background_opacity=kwargs.get("background_opacity", self.background_opacity),
+            text_opacity=kwargs.get("text_opacity", self.text_opacity),
+            text_alignment=kwargs.get("text_alignment", self.text_alignment),
             config=kwargs.get("config", self.config),
         )

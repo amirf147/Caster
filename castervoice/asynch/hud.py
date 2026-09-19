@@ -61,6 +61,9 @@ class SignalBridge(QtCore.QObject):
     show_profile_dialog_requested = QtCore.Signal(str)
     show_theme_dialog_requested = QtCore.Signal()
     set_opacity_requested = QtCore.Signal(float)
+    set_background_opacity_requested = QtCore.Signal(float)
+    set_text_opacity_requested = QtCore.Signal(float)
+    set_text_alignment_requested = QtCore.Signal(str)
     set_theme_requested = QtCore.Signal(str)
     cycle_theme_requested = QtCore.Signal()
     clear_hud_requested = QtCore.Signal()
@@ -105,6 +108,9 @@ def main():
     bridge.show_profile_dialog_requested.connect(window.show_profile_dialog)
     bridge.show_theme_dialog_requested.connect(window.show_theme_dialog)
     bridge.set_opacity_requested.connect(window.set_opacity)
+    bridge.set_background_opacity_requested.connect(window.set_background_opacity)
+    bridge.set_text_opacity_requested.connect(window.set_text_opacity)
+    bridge.set_text_alignment_requested.connect(window.set_text_alignment)
     bridge.set_theme_requested.connect(window.apply_theme)
     bridge.cycle_theme_requested.connect(window.cycle_theme)
     bridge.clear_hud_requested.connect(window.clear_history)
@@ -225,6 +231,18 @@ def _setup_xmlrpc_methods(server, bridge):
         bridge.set_opacity_requested.emit(float(opacity))
         return 0
 
+    def _do_set_background_opacity(opacity=1.0):
+        bridge.set_background_opacity_requested.emit(float(opacity))
+        return 0
+
+    def _do_set_text_opacity(opacity=1.0):
+        bridge.set_text_opacity_requested.emit(float(opacity))
+        return 0
+
+    def _do_set_text_alignment(alignment="left"):
+        bridge.set_text_alignment_requested.emit(str(alignment))
+        return 0
+
     def _do_show_help():
         bridge.show_help_requested.emit()
         return 0
@@ -273,6 +291,11 @@ def _setup_xmlrpc_methods(server, bridge):
     server.register_function(_do_show_theme_dialog, "show_theme_dialog")
     server.register_function(_do_show_theme_dialog, "show_customizer")
     server.register_function(_do_set_opacity, "set_opacity")
+    server.register_function(_do_set_background_opacity, "set_background_opacity")
+    server.register_function(_do_set_text_opacity, "set_text_opacity")
+    server.register_function(_do_set_text_opacity, "set_letter_opacity")
+    server.register_function(_do_set_text_alignment, "set_text_alignment")
+    server.register_function(_do_set_text_alignment, "set_alignment")
     server.register_function(_do_show_help, "show_help")
     server.register_function(_do_hide_help, "hide_help")
     server.register_function(_do_show_rules, "show_rules")

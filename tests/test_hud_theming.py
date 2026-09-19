@@ -83,9 +83,9 @@ class TestHudTheming(unittest.TestCase):
         self.assertEqual(loaded["accent_color"], "#ff007f")
         self.assertEqual(loaded["opacity"], 0.88)
 
-        # Verify stylesheet generation contains the custom colors
+        # Verify stylesheet generation contains the custom colors (with opacity 0.88 -> rgba)
         stylesheet = ThemeManager.get_stylesheet("cyberpunk-neon")
-        self.assertIn("#0a0a12", stylesheet)
+        self.assertIn("rgba(10, 10, 18, 224)", stylesheet)
         self.assertIn("#00ffcc", stylesheet)
         self.assertIn("#ff007f", stylesheet)
 
@@ -121,6 +121,55 @@ class TestHudTheming(unittest.TestCase):
         self.assertIn("color: #f0f0f0", css)
         self.assertIn("border: 1px solid #404040", css)
         self.assertIn("selection-background-color: #00aaee", css)
+
+    def test_distinct_background_and_letter_opacity(self):
+        data = {
+            "background_color": "#1e1e24",
+            "textedit_bg": "#18181c",
+            "text_color": "#ffffff",
+            "accent_color": "#2563eb",
+            "border_color": "#3b3b4a",
+            "cmd_color": "#3498db",
+            "sys_color": "#9b59b6",
+            "err_color": "#e74c3c",
+            "background_opacity": 0.60,
+            "text_opacity": 0.85,
+        }
+        css = build_stylesheet(data)
+        # Background alpha: 0.60 * 255 = 153
+        self.assertIn("rgba(30, 30, 36, 153)", css)
+        self.assertIn("rgba(24, 24, 28, 153)", css)
+        # Text/letter alpha: 0.85 * 255 = 217
+        self.assertIn("rgba(255, 255, 255, 217)", css)
+
+    def test_get_stylesheet_with_overridden_opacities(self):
+        css = ThemeManager.get_stylesheet("classic", background_opacity=0.50, text_opacity=0.90)
+        # Background alpha: 0.50 * 255 = 128 (classic bg #f0f0f0 -> 240, 240, 240)
+        self.assertIn("rgba(240, 240, 240, 128)", css)
+        # Letter alpha: 0.90 * 255 = 230 (classic text #000000 -> 0, 0, 0)
+        self.assertIn("rgba(0, 0, 0, 230)", css)
+
+        # Verify get_theme_colors with custom text opacity
+        theme_id = ThemeManager.save_custom_theme("AlphaTheme", {
+            "cmd_color": "#00ff00",
+            "text_opacity": 0.70,
+        })
+        colors = ThemeManager.get_theme_colors("alphatheme")
+        # 0.70 * 255 = 178
+        self.assertIn("rgba(0, 255, 0, 178)", colors["cmd_color"])
+
+    def test_theme_with_text_alignment(self):
+        # Verify built-in themes have default text_alignment="left"
+        data = ThemeManager.get_theme_data("classic")
+        self.assertEqual(data.get("text_alignment"), "left")
+
+        # Save and retrieve custom theme with text_alignment="right"
+        theme_id = ThemeManager.save_custom_theme("RightAlignedTheme", {
+            "background_color": "#111111",
+            "text_alignment": "right",
+        })
+        loaded = ThemeManager.get_theme_data(theme_id)
+        self.assertEqual(loaded.get("text_alignment"), "right")
 
 
 if __name__ == "__main__":

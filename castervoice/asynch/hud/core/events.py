@@ -133,16 +133,36 @@ class ThemeChangeEvent(HudEvent):
 
 
 class OpacityChangeEvent(HudEvent):
-    """Fired when HUD window transparency / opacity is adjusted."""
+    """Fired when HUD window, background, or text (letter) opacity is adjusted."""
     event_type = "opacity_change"
 
-    def __init__(self, opacity=1.0, timestamp=None):
+    def __init__(self, opacity=1.0, background_opacity=None, text_opacity=None, timestamp=None):
         HudEvent.__init__(self, timestamp)
         self.opacity = float(opacity)
+        self.background_opacity = float(background_opacity) if background_opacity is not None else None
+        self.text_opacity = float(text_opacity) if text_opacity is not None else None
 
     def to_dict(self):
         d = HudEvent.to_dict(self)
         d["opacity"] = self.opacity
+        if self.background_opacity is not None:
+            d["background_opacity"] = self.background_opacity
+        if self.text_opacity is not None:
+            d["text_opacity"] = self.text_opacity
+        return d
+
+
+class TextAlignmentChangeEvent(HudEvent):
+    """Fired when HUD text alignment ('left' or 'right') is adjusted."""
+    event_type = "text_alignment_change"
+
+    def __init__(self, text_alignment="left", timestamp=None):
+        HudEvent.__init__(self, timestamp)
+        self.text_alignment = "right" if str(text_alignment).lower() == "right" else "left"
+
+    def to_dict(self):
+        d = HudEvent.to_dict(self)
+        d["text_alignment"] = self.text_alignment
         return d
 
 
@@ -186,7 +206,16 @@ EVENT_TYPE_MAP = {
     "window_focus": lambda d: WindowFocusEvent(is_focused=d.get("is_focused", False), timestamp=d.get("timestamp")),
     "drag_mode": lambda d: DragModeEvent(is_drag_mode=d.get("is_drag_mode", False), timestamp=d.get("timestamp")),
     "theme_change": lambda d: ThemeChangeEvent(theme_name=d.get("theme_name", "classic"), timestamp=d.get("timestamp")),
-    "opacity_change": lambda d: OpacityChangeEvent(opacity=d.get("opacity", 1.0), timestamp=d.get("timestamp")),
+    "opacity_change": lambda d: OpacityChangeEvent(
+        opacity=d.get("opacity", 1.0),
+        background_opacity=d.get("background_opacity"),
+        text_opacity=d.get("text_opacity"),
+        timestamp=d.get("timestamp"),
+    ),
+    "text_alignment_change": lambda d: TextAlignmentChangeEvent(
+        text_alignment=d.get("text_alignment", "left"),
+        timestamp=d.get("timestamp"),
+    ),
     "clear_history": lambda d: ClearHistoryEvent(timestamp=d.get("timestamp")),
     "heartbeat": lambda d: HeartbeatEvent(engine_name=d.get("engine_name", ""), timestamp=d.get("timestamp")),
 }

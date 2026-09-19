@@ -310,7 +310,10 @@ BUILTIN_THEME_DATA = {
         "cmd_color": "blue",
         "sys_color": "purple",
         "err_color": "red",
+        "background_opacity": 1.0,
+        "text_opacity": 1.0,
         "opacity": 1.0,
+        "text_alignment": "left",
     },
     THEME_FROSTED: {
         "name": "Frosted Dark",
@@ -322,7 +325,10 @@ BUILTIN_THEME_DATA = {
         "cmd_color": "#3498db",
         "sys_color": "#9b59b6",
         "err_color": "#e74c3c",
+        "background_opacity": 0.95,
+        "text_opacity": 1.0,
         "opacity": 0.95,
+        "text_alignment": "left",
     },
     THEME_MINIMAL: {
         "name": "Minimal Transparent",
@@ -334,7 +340,10 @@ BUILTIN_THEME_DATA = {
         "cmd_color": "#93c5fd",
         "sys_color": "#c084fc",
         "err_color": "#f87171",
+        "background_opacity": 0.75,
+        "text_opacity": 1.0,
         "opacity": 0.85,
+        "text_alignment": "left",
     },
     THEME_HIGH_CONTRAST: {
         "name": "High Contrast",
@@ -346,22 +355,67 @@ BUILTIN_THEME_DATA = {
         "cmd_color": "#00ffff",
         "sys_color": "#ffff00",
         "err_color": "#ff0000",
+        "background_opacity": 1.0,
+        "text_opacity": 1.0,
         "opacity": 1.0,
+        "text_alignment": "left",
     },
 }
 
 CUSTOM_THEMES_FILE = os.path.expanduser("~/.caster/hud_custom_themes.json")
 
 
+def color_to_qss(color_val, opacity=1.0):
+    """
+    Converts any color string (#RRGGBB, #RGB, named color, or rgba)
+    combined with opacity float (0.0 to 1.0) into a standard QSS color string.
+    If opacity >= 0.999 and color_val is not an rgba string, returns as-is.
+    """
+    op = max(0.0, min(1.0, float(opacity)))
+    s = str(color_val).strip()
+    if op >= 0.999 and not s.lower().startswith("rgba"):
+        return s
+
+    alpha_int = int(round(op * 255))
+    if s.lower().startswith("rgba") and "(" in s and ")" in s:
+        parts = s[s.find("(") + 1 : s.find(")")].split(",")
+        if len(parts) >= 3:
+            try:
+                r = int(parts[0].strip())
+                g = int(parts[1].strip())
+                b = int(parts[2].strip())
+                return "rgba({0}, {1}, {2}, {3})".format(r, g, b, alpha_int)
+            except Exception:
+                pass
+    try:
+        from castervoice.lib.qt import QtGui
+        qc = QtGui.QColor(s)
+        if qc.isValid():
+            return "rgba({0}, {1}, {2}, {3})".format(qc.red(), qc.green(), qc.blue(), alpha_int)
+    except Exception:
+        pass
+    return s
+
+
 def build_stylesheet(data):
     """
     Generates a full Qt QSS stylesheet string dynamically from a theme data dictionary.
+    Supports distinct background_opacity and text_opacity (letter opacity).
     """
-    bg = data.get("background_color", "#1e1e24")
-    txt_bg = data.get("textedit_bg", bg)
-    txt = data.get("text_color", "#f8f9fa")
-    accent = data.get("accent_color", "#2563eb")
-    border = data.get("border_color", "#3b3b4a")
+    bg_raw = data.get("background_color", "#1e1e24")
+    txt_bg_raw = data.get("textedit_bg", bg_raw)
+    txt_raw = data.get("text_color", "#f8f9fa")
+    accent_raw = data.get("accent_color", "#2563eb")
+    border_raw = data.get("border_color", "#3b3b4a")
+
+    bg_op = float(data.get("background_opacity", data.get("opacity", 1.0)))
+    txt_op = float(data.get("text_opacity", 1.0))
+
+    bg = color_to_qss(bg_raw, bg_op)
+    txt_bg = color_to_qss(txt_bg_raw, bg_op)
+    txt = color_to_qss(txt_raw, txt_op)
+    accent = color_to_qss(accent_raw, 1.0)
+    border = color_to_qss(border_raw, max(0.3, bg_op))
 
     return """
         QMainWindow, QWidget {{
@@ -567,25 +621,41 @@ class ThemeManager(object):
     @classmethod
     def get_theme_colors(cls, theme_name):
         """
-        Returns history text colors (cmd_color, sys_color, err_color).
+        Returns history text colors (cmd_color, sys_color, err_color),
+        adjusted for text_opacity (letter opacity).
         """
         data = cls.get_theme_data(theme_name)
+        txt_op = float(data.get("text_opacity", 1.0))
+        cmd_raw = data.get("cmd_color", "#3498db")
+        sys_raw = data.get("sys_color", "#9b59b6")
+        err_raw = data.get("err_color", "#e74c3c")
         return {
-            "cmd_color": data.get("cmd_color", "#3498db"),
-            "sys_color": data.get("sys_color", "#9b59b6"),
-            "err_color": data.get("err_color", "#e74c3c"),
+            "cmd_color": color_to_qss(cmd_raw, txt_op),
+            "sys_color": color_to_qss(sys_raw, txt_op),
+            "err_color": color_to_qss(err_raw, txt_op),
         }
 
     @classmethod
-    def get_stylesheet(cls, theme_name):
+    def get_stylesheet(cls, theme_name, background_opacity=None, text_opacity=None):
         """Returns the complete QSS stylesheet string for the requested theme."""
         norm = cls.normalize_theme_name(theme_name)
-        if norm in PRESET_THEMES:
+        theme_data = cls.get_theme_data(norm)
+        if background_opacity is not None:
+            theme_data["background_opacity"] = float(background_opacity)
+        if text_opacity is not None:
+            theme_data["text_opacity"] = float(text_opacity)
+
+        bg_op = float(theme_data.get("background_opacity", theme_data.get("opacity", 1.0)))
+        txt_op = float(theme_data.get("text_opacity", 1.0))
+
+        # Built-in presets at default opacities
+        if norm in PRESET_THEMES and bg_op >= 0.999 and txt_op >= 0.999 and background_opacity is None and text_opacity is None:
             return PRESET_THEMES[norm]
 
+        # Dynamic build for custom themes or overridden opacities
         customs = cls.load_custom_themes()
-        if norm in customs:
-            return build_stylesheet(customs[norm])
+        if norm in customs or norm in BUILTIN_THEME_DATA or background_opacity is not None or text_opacity is not None:
+            return build_stylesheet(theme_data)
 
         # Check optional external .qss file in ~/.caster/themes/<name>.qss
         external_path = os.path.expanduser("~/.caster/themes/{0}.qss".format(norm))

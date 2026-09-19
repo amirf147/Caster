@@ -19,6 +19,7 @@ from castervoice.asynch.hud.core.events import (
     DragModeEvent,
     ThemeChangeEvent,
     OpacityChangeEvent,
+    TextAlignmentChangeEvent,
     ClearHistoryEvent,
     HeartbeatEvent,
 )
@@ -74,7 +75,17 @@ def reduce_event(state, event):
         return state.clone(theme=event.theme_name)
 
     elif isinstance(event, OpacityChangeEvent):
-        return state.clone(opacity=max(0.1, min(1.0, float(event.opacity))))
+        bg_op = event.background_opacity if event.background_opacity is not None else state.background_opacity
+        txt_op = event.text_opacity if event.text_opacity is not None else state.text_opacity
+        return state.clone(
+            opacity=max(0.1, min(1.0, float(event.opacity))),
+            background_opacity=max(0.0, min(1.0, float(bg_op))),
+            text_opacity=max(0.1, min(1.0, float(txt_op))),
+        )
+
+    elif isinstance(event, TextAlignmentChangeEvent):
+        align = "right" if str(event.text_alignment).lower() == "right" else "left"
+        return state.clone(text_alignment=align)
 
     elif isinstance(event, ClearHistoryEvent):
         return state.clone(history=())

@@ -13,6 +13,7 @@ from castervoice.asynch.hud.core.events import (
     WindowFocusEvent,
     DragModeEvent,
     ThemeChangeEvent,
+    TextAlignmentChangeEvent,
     ClearHistoryEvent,
     HeartbeatEvent,
     event_from_dict,
@@ -105,6 +106,22 @@ class TestHudCore(unittest.TestCase):
         self.assertIsInstance(deserialized, DesktopContextEvent)
         self.assertEqual(deserialized.process_name, "antigravity")
         self.assertEqual(deserialized.semantic_zone, "EditorCodeBuffer")
+
+    def test_reduce_text_alignment_event(self):
+        state = HudState()
+        self.assertEqual(state.text_alignment, "left")
+
+        s1 = reduce_event(state, TextAlignmentChangeEvent(text_alignment="right"))
+        self.assertEqual(s1.text_alignment, "right")
+
+        # Roundtrip event serialization
+        ev = TextAlignmentChangeEvent(text_alignment="right")
+        d = ev.to_dict()
+        self.assertEqual(d["event_type"], "text_alignment_change")
+        self.assertEqual(d["text_alignment"], "right")
+        ev2 = event_from_dict(d)
+        self.assertIsInstance(ev2, TextAlignmentChangeEvent)
+        self.assertEqual(ev2.text_alignment, "right")
 
     def test_config_fallback_merger(self):
         user_cfg = {"theme": "frosted-dark", "custom_key": 123}

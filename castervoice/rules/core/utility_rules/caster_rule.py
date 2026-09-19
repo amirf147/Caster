@@ -25,6 +25,7 @@ from castervoice.asynch.hud_support import (
     save_hud_profile,
     load_hud_profile,
     show_hud_theme_dialog,
+    set_hud_text_alignment,
     show_hud_help,
     hide_hud_help,
 )
@@ -82,6 +83,8 @@ class CasterRule(MappingRule):
             R(Function(show_hud_theme_dialog), rdescript="Open HUD Customize and Themes dialog"),
         "caster hud (customize | themes | customizer)":
             R(Function(show_hud_theme_dialog), rdescript="Open HUD Customize and Themes dialog"),
+        "caster hud [text] align <hud_alignment>":
+            R(Function(set_hud_text_alignment), rdescript="Set HUD text alignment to left or right"),
         "caster hud (border | title bar | frame) [toggle]":
             R(Function(toggle_hud_border), rdescript="Toggle HUD title bar / frameless overlay"),
         "caster hud (drag | move) [toggle]":
@@ -130,6 +133,10 @@ class CasterRule(MappingRule):
             "high contrast": "high-contrast",
             "contrast": "high-contrast",
         }, default=None),
+        Choice("hud_alignment", {
+            "left": "left",
+            "right": "right",
+        }, default="left"),
     ]
 
 
