@@ -13,13 +13,13 @@ from castervoice.lib import control, printer
 from castervoice.lib.ctrl.mgr.engine_manager import EngineModesManager
 
 try:
-    from castervoice.plugins.taskbar_hud import (
+    from taskbar_hud import (
         TaskbarHudBridgeClient,
         get_taskbar_hud_bridge,
         TaskbarHudPrintHandler,
         TaskbarHudPlugin,
     )
-    from castervoice.plugins.adce import adce, add_context_listener, remove_context_listener
+    from adce import adce, add_context_listener, remove_context_listener
     HAS_PLUGINS = True
 except (ImportError, ModuleNotFoundError):
     HAS_PLUGINS = False

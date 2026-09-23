@@ -53,3 +53,10 @@ class PluginBase(object):
         and release resources cleanly here.
         """
         self._is_running = False
+
+    def get_rules(self):
+        """
+        Returns a list of Dragonfly Rule classes or (RuleClass, RuleDetails) tuples
+        provided by this plugin to be registered with GrammarManager.
+        """
+        return []

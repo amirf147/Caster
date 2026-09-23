@@ -367,12 +367,9 @@ def _get_defaults():
             "default_hooks": ['PrinterHook', 'RulesLoadedHook'],
         },
 
-        # Plugin activation settings
+        # Plugin activation settings (default in-tree plugins)
         "plugins": {
-            "themed_hud": True,
-            "standard_hud": False,
-            "taskbar_hud": True,
-            "adce": True,
+            "standard_hud": True,
             "sikuli": False,
         },
 

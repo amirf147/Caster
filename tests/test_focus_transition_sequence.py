@@ -19,7 +19,7 @@ from castervoice.asynch.hud_support import (
 )
 
 try:
-    from caster_user_content.util.adce_bridge import adce, is_ide_terminal_focused
+    from adce import adce, is_ide_terminal_focused
     from caster_user_content.rules.apps.vscode.ide_terminal import IDETerminalRule, get_rule as get_ide_terminal_rule
     from caster_user_content.rules.apps.vscode.antigravity_ide import AntigravityIDERule, get_rule as get_antigravity_rule
     from caster_user_content.rules.apps.vscode.vscode import CustomVSCodeRule, get_rule as get_vscode_rule
@@ -59,7 +59,7 @@ class TestFocusTransitionSequence(unittest.TestCase):
             return
 
         # Stop background polling threads during test execution to prevent race conditions with live daemon
-        from caster_user_content.util.adce_bridge import adce
+        from adce import adce
         adce.stop()
 
         maker = MappingRuleMaker(MockTransformerRunner(), MockSmrConfigurer())

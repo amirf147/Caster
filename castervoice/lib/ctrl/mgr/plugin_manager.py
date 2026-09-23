@@ -74,12 +74,24 @@ class PluginManager(object):
         except Exception:
             pass
 
-        # User directory from settings
+        # User directory from settings or defaults
         user_dir = self._settings.get("paths", {}).get("USER_DIR")
+        if not user_dir:
+            try:
+                from castervoice.lib import settings
+                user_dir = settings.settings(["paths", "USER_DIR"])
+                if not user_dir:
+                    from appdirs import user_data_dir
+                    user_dir = user_data_dir(appname="caster", appauthor=False)
+            except Exception:
+                pass
+
         if user_dir:
             user_plugins = os.path.join(user_dir, "caster_user_content", "plugins")
             if os.path.isdir(user_plugins):
                 dirs.append(user_plugins)
+                if user_plugins not in sys.path:
+                    sys.path.insert(0, user_plugins)
 
         return dirs
 
@@ -122,21 +134,41 @@ class PluginManager(object):
         """Loads a plugin module, instantiates its PluginBase class, and registers it."""
         try:
             module = None
-            module_name = "castervoice.plugins.{}".format(plugin_name)
-            try:
-                module = importlib.import_module(module_name)
-            except (ImportError, ModuleNotFoundError):
-                if os.path.isfile(plugin_file):
+            for cand_module_name in [
+                plugin_name,
+                "caster_user_content.plugins.{}".format(plugin_name),
+                "castervoice.plugins.{}".format(plugin_name),
+            ]:
+                try:
+                    module = importlib.import_module(cand_module_name)
+                    break
+                except (ImportError, ModuleNotFoundError):
+                    continue
+
+            if not module and os.path.isfile(plugin_file):
+                parent_dir = os.path.dirname(plugin_file)
+                is_pkg = os.path.basename(plugin_file) in ("__init__.py", "plugin.py") and os.path.isdir(parent_dir) and os.path.basename(parent_dir) == plugin_name
+
+                if is_pkg:
+                    init_file = os.path.join(parent_dir, "__init__.py") if os.path.isfile(os.path.join(parent_dir, "__init__.py")) else plugin_file
+                    spec = importlib.util.spec_from_file_location(
+                        plugin_name,
+                        init_file,
+                        submodule_search_locations=[parent_dir],
+                    )
+                else:
                     spec = importlib.util.spec_from_file_location(plugin_name, plugin_file)
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        if os.path.isdir(os.path.dirname(plugin_file)):
-                            module.__path__ = [os.path.dirname(plugin_file)]
-                        sys.modules[plugin_name] = module
-                        spec.loader.exec_module(module)
+
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[plugin_name] = module
+                    spec.loader.exec_module(module)
 
             if not module:
                 return
+
+            if plugin_name not in sys.modules:
+                sys.modules[plugin_name] = module
 
             plugin_instance = None
 
@@ -162,6 +194,20 @@ class PluginManager(object):
 
             plugin_instance.initialize(self._nexus, cfg)
             self._plugins[plugin_name] = plugin_instance
+
+            # Register companion rules with GrammarManager if supported
+            if self._nexus and hasattr(self._nexus, "_grammar_manager") and self._nexus._grammar_manager:
+                try:
+                    rules = plugin_instance.get_rules() if hasattr(plugin_instance, "get_rules") else []
+                    if rules:
+                        for rule_item in rules:
+                            if inspect.isclass(rule_item):
+                                self._nexus._grammar_manager.add_rule(rule_item)
+                            elif isinstance(rule_item, tuple) and len(rule_item) >= 2:
+                                self._nexus._grammar_manager.add_rule(rule_item[0], rule_item[1])
+                except Exception as r_err:
+                    _logger.warning("Failed to register rules for plugin '%s': %s", plugin_name, r_err)
+
             _logger.info("Plugin '%s' loaded and initialized successfully.", plugin_name)
 
         except Exception as ex:

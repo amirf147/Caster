@@ -99,6 +99,23 @@ class TestPluginManager(unittest.TestCase):
         self.manager._load_plugin_file("broken", "C:/path/does/not/exist/plugin.py", {})
         self.assertIsNone(self.manager.get_plugin("broken"))
 
+    def test_plugin_rules_registration(self):
+        """Verifies companion rules returned by get_rules() are registered with GrammarManager."""
+        class DummyVoiceRule:
+            pass
+
+        class RuleProvidingPlugin(PluginBase):
+            name = "rule_provider"
+            def get_rules(self):
+                return [DummyVoiceRule]
+
+        self.manager._nexus._grammar_manager = MagicMock()
+        provider = RuleProvidingPlugin()
+        provider.initialize(self.manager._nexus, {})
+        for r in provider.get_rules():
+            self.manager._nexus._grammar_manager.add_rule(r)
+        self.manager._nexus._grammar_manager.add_rule.assert_called_once_with(DummyVoiceRule)
+
 
 if __name__ == "__main__":
     unittest.main()
