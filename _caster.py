@@ -21,6 +21,9 @@ EngineConfigEarly() # requires settings/dependencies
 
 
 if control.nexus() is None:
+    from castervoice.lib.ctrl.mgr.plugin_manager import PluginManager
+    PluginManager.prepare_environment(settings.SETTINGS)
+
     from castervoice.lib.ctrl.mgr.loading.load.content_loader import ContentLoader
     from castervoice.lib.ctrl.mgr.loading.load.content_request_generator import ContentRequestGenerator
     from castervoice.lib.ctrl.mgr.loading.load.reload_fn_provider import ReloadFunctionProvider
@@ -30,12 +33,11 @@ if control.nexus() is None:
     _sma = SysModulesAccessor()
     _content_loader = ContentLoader(_crg, importlib.import_module, _rp.get_reload_fn(), _sma)
     control.init_nexus(_content_loader)
+
+    _plugin_manager = PluginManager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
+    _plugin_manager.load_plugins()
+
     EngineConfigLate() # Requires grammars to be loaded and nexus
-
-from castervoice.lib.ctrl.mgr.plugin_manager import PluginManager
-
-_plugin_manager = PluginManager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
-_plugin_manager.load_plugins()
-_plugin_manager.start_plugins()
+    _plugin_manager.start_plugins()
 
 printer.out("\n") # Force update to display text

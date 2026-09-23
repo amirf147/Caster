@@ -233,11 +233,20 @@ def get_focus_tracker():
     if _FOCUS_TRACKER is None:
         with _FOCUS_TRACKER_LOCK:
             if _FOCUS_TRACKER is None:
-                from castervoice.asynch.hud.core.adce_tracker import get_adce_tracker
                 try:
-                    _FOCUS_TRACKER = get_adce_tracker(on_context_changed=_on_adce_context_changed)
+                    import adce
+                    if hasattr(adce, "add_context_listener") and hasattr(adce, "adce"):
+                        adce.add_context_listener(_on_adce_context_changed)
+                        _FOCUS_TRACKER = adce.adce
                 except Exception:
                     pass
+
+                if _FOCUS_TRACKER is None:
+                    from castervoice.asynch.hud.core.adce_tracker import get_adce_tracker
+                    try:
+                        _FOCUS_TRACKER = get_adce_tracker(on_context_changed=_on_adce_context_changed)
+                    except Exception:
+                        pass
     return _FOCUS_TRACKER
 
 

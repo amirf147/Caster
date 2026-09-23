@@ -62,6 +62,12 @@ class PluginManager(object):
                 continue
             self._scan_directory(directory, plugins_config)
 
+    @classmethod
+    def prepare_environment(cls, settings_dict=None):
+        """Ensures plugin directories are registered in sys.path before rule loading."""
+        pm = cls(settings_dict=settings_dict)
+        return pm._default_plugin_directories()
+
     def _default_plugin_directories(self):
         """Calculates default plugin search directories (built-in and user)."""
         dirs = []
@@ -71,22 +77,27 @@ class PluginManager(object):
             builtin_plugins = os.path.join(base_dir, "plugins")
             if os.path.isdir(builtin_plugins):
                 dirs.append(builtin_plugins)
+                if builtin_plugins not in sys.path:
+                    sys.path.append(builtin_plugins)
         except Exception:
             pass
 
         # User directory from settings or defaults
         user_dir = self._settings.get("paths", {}).get("USER_DIR")
-        if not user_dir:
+        if not user_dir or not os.path.isdir(user_dir):
             try:
                 from castervoice.lib import settings
                 user_dir = settings.settings(["paths", "USER_DIR"])
-                if not user_dir:
-                    from appdirs import user_data_dir
-                    user_dir = user_data_dir(appname="caster", appauthor=False)
+            except Exception:
+                pass
+        if not user_dir or not os.path.isdir(user_dir):
+            try:
+                from appdirs import user_data_dir
+                user_dir = user_data_dir(appname="caster", appauthor=False)
             except Exception:
                 pass
 
-        if user_dir:
+        if user_dir and os.path.isdir(user_dir):
             user_plugins = os.path.join(user_dir, "caster_user_content", "plugins")
             if os.path.isdir(user_plugins):
                 dirs.append(user_plugins)
