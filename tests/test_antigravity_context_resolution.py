@@ -135,10 +135,17 @@ class TestAntigravityContextResolution(unittest.TestCase):
         self.assertFalse(_is_rule_enabled_in_config(mock_rule, {"AntigravityAppRule"}, {"AntigravityAppRule"}))
 
     def test_adce_context_resolution_when_unspecified(self):
-        """Verifies that when target_process is omitted, context is resolved via ADCE bridge."""
-        with patch("caster_user_content.util.adce_bridge.adce.is_connected", return_value=True), \
-             patch("caster_user_content.util.adce_bridge.adce.get_current_process", return_value="antigravity.exe"), \
-             patch("caster_user_content.util.adce_bridge.adce.get_current_title", return_value="Antigravity"):
+        """Verifies that when target_process is omitted, context is resolved via ADCE tracker."""
+        mock_tracker = MagicMock()
+        mock_tracker.is_connected.return_value = True
+        mock_tracker.get_current_context.return_value = {
+            "is_connected": True,
+            "process_name": "antigravity.exe",
+            "window_title": "Antigravity",
+            "semantic_zone": "",
+            "active_file": "",
+        }
+        with patch("castervoice.asynch.hud_support.get_focus_tracker", return_value=mock_tracker):
             rules = get_active_contextual_rules()
             self.assertIn("Antigravity Standalone", rules)
             self.assertNotIn("Antigravity IDE", rules)

@@ -11,7 +11,6 @@ from castervoice.lib import printer
 from castervoice.lib.ctrl.configure_engine import EngineConfigEarly, EngineConfigLate
 from castervoice.lib.ctrl.dependencies import DependencyMan
 from castervoice.lib.ctrl.updatecheck import UpdateChecker
-from castervoice.asynch import hud_support
 
 printer.out("@ - Starting {} with `{}` Engine -\n".format(settings.SOFTWARE_NAME, get_engine().name))
 
@@ -33,24 +32,10 @@ if control.nexus() is None:
     control.init_nexus(_content_loader)
     EngineConfigLate() # Requires grammars to be loaded and nexus
 
-if settings.SETTINGS["sikuli"]["enabled"]:
-    from castervoice.asynch.sikuli import sikuli_controller
-    sikuli_controller.get_instance().bootstrap_start_server_proxy()
+from castervoice.lib.ctrl.mgr.plugin_manager import PluginManager
 
-if get_current_engine().name != "text":
-    hud_support.start_hud()
-
-dh = printer.get_delegating_handler()
-dh.register_handler(hud_support.HudPrintMessageHandler()) # After hud starts
-
-try:
-    from caster_user_content.util.taskbar_hud_printer_handler import TaskbarHudPrintHandler
-    dh.register_handler(TaskbarHudPrintHandler())
-    from caster_user_content.util.taskbar_hud_bridge import get_taskbar_hud_bridge
-    _tb = get_taskbar_hud_bridge()
-    if _tb:
-        _tb.send_update(command="Ready", status="idle", mic_state="on", rules="Global")
-except Exception:
-    pass
+_plugin_manager = PluginManager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
+_plugin_manager.load_plugins()
+_plugin_manager.start_plugins()
 
 printer.out("\n") # Force update to display text

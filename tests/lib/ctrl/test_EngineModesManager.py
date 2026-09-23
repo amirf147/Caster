@@ -11,6 +11,7 @@ class mockExclusiveManager():
 class TestEngineModesManager(TestCase):
     def setUp(self):
         self._manager = EngineModesManager(mockExclusiveManager())
+        self._manager.engine = "text"
 
     def test_set_engine_mode(self):
         self._manager.set_engine_mode(mode="numbers", state=True)
@@ -39,3 +40,21 @@ class TestEngineModesManager(TestCase):
     def test_set_mic_mode(self):
         self._manager.set_mic_mode(mode="sleeping")
         self.assertEqual("sleeping", self._manager.get_mic_mode())
+
+    def test_mic_listener_registration_and_notification(self):
+        recorded = []
+
+        def listener(mode):
+            recorded.append(mode)
+
+        self._manager.add_mic_listener(listener)
+        self._manager.set_mic_mode(mode="sleeping")
+        self.assertEqual(recorded, ["sleeping"])
+
+        self._manager.set_mic_mode(mode="on")
+        self.assertEqual(recorded, ["sleeping", "on"])
+
+        self._manager.remove_mic_listener(listener)
+        self._manager.set_mic_mode(mode="off")
+        self.assertEqual(recorded, ["sleeping", "on"])
+

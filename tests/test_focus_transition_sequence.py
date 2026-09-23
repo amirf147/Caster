@@ -76,50 +76,47 @@ class TestFocusTransitionSequence(unittest.TestCase):
         grammar_vsc = maker.create_non_ccr_grammar(ManagedRuleMock(rule_vsc_cls, details_vsc))
         grammar_vsc.load()
 
+    def _simulate_adce_focus(self, proc, title, zone, file="hud_support.py", connected=True):
+        adce._current_process = (proc or "").lower()
+        adce._current_title = title or ""
+        adce._current_zone = zone or ""
+        adce._active_file = file or ""
+        adce._is_connected = connected
+        _on_adce_context_changed(
+            process_name=proc,
+            window_title=title,
+            semantic_zone=zone,
+            active_file=file,
+            is_connected=connected,
+        )
+
     def test_complete_focus_sequence(self):
         proc = "antigravity ide"
         title = "hud_support.py - Caster - Antigravity IDE"
 
         # Step 1: User is focused in the Editor Buffer
-        _on_adce_context_changed(
-            process_name=proc,
-            window_title=title,
-            semantic_zone="editor_buffer",
-            active_file="hud_support.py",
-            is_connected=True,
-        )
+        self._simulate_adce_focus(proc, title, "editor_buffer", "hud_support.py", True)
         rules_step1 = get_active_contextual_rules(target_process=proc, target_title=title)
         self.assertIn("Antigravity IDE", rules_step1)
         self.assertIn("CustomVSCode", rules_step1)
         self.assertNotIn("IDETerminal", rules_step1)
 
         # Step 2: User clicks into the Integrated Terminal (0-lag transition)
-        _on_adce_context_changed(
-            process_name=proc,
-            window_title=title,
-            semantic_zone="terminal",
-            active_file="hud_support.py",
-            is_connected=True,
-        )
+        self._simulate_adce_focus(proc, title, "terminal", "hud_support.py", True)
         rules_step2 = get_active_contextual_rules(target_process=proc, target_title=title)
         self.assertIn("Antigravity IDE", rules_step2)
         self.assertIn("CustomVSCode", rules_step2)
         self.assertIn("IDETerminal", rules_step2)
 
         # Step 3: User clicks away from terminal back into Editor Buffer (0-lag deactivation)
-        _on_adce_context_changed(
-            process_name=proc,
-            window_title=title,
-            semantic_zone="editor_buffer",
-            active_file="hud_support.py",
-            is_connected=True,
-        )
+        self._simulate_adce_focus(proc, title, "editor_buffer", "hud_support.py", True)
         rules_step3 = get_active_contextual_rules(target_process=proc, target_title=title)
         self.assertIn("Antigravity IDE", rules_step3)
         self.assertIn("CustomVSCode", rules_step3)
         self.assertNotIn("IDETerminal", rules_step3)
 
         # Step 4: User clicks away from IDE to Chrome
+        self._simulate_adce_focus("chrome", "Google Chrome", "", "", True)
         _on_window_focus_changed("chrome", "Google Chrome")
         rules_step4 = get_active_contextual_rules(target_process="chrome", target_title="Google Chrome")
         self.assertNotIn("IDETerminal", rules_step4)
@@ -128,13 +125,7 @@ class TestFocusTransitionSequence(unittest.TestCase):
 
     def test_adce_disconnected_fallback(self):
         """Verifies that when ADCE is disconnected, HUD rules fallback safely without throwing."""
-        _on_adce_context_changed(
-            process_name="",
-            window_title="",
-            semantic_zone="",
-            active_file="",
-            is_connected=False,
-        )
+        self._simulate_adce_focus("", "", "", "", False)
         rules_offline = get_active_contextual_rules(target_process="notepad", target_title="Untitled - Notepad")
         self.assertIsInstance(rules_offline, list)
         self.assertNotIn("IDETerminal", rules_offline)
