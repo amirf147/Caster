@@ -42,4 +42,15 @@ if get_current_engine().name != "text":
 
 dh = printer.get_delegating_handler()
 dh.register_handler(hud_support.HudPrintMessageHandler()) # After hud starts
+
+try:
+    from caster_user_content.util.taskbar_hud_printer_handler import TaskbarHudPrintHandler
+    dh.register_handler(TaskbarHudPrintHandler())
+    from caster_user_content.util.taskbar_hud_bridge import get_taskbar_hud_bridge
+    _tb = get_taskbar_hud_bridge()
+    if _tb:
+        _tb.send_update(command="Ready", status="idle", mic_state="on", rules="Global")
+except Exception:
+    pass
+
 printer.out("\n") # Force update to display text

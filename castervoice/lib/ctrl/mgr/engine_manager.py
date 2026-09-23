@@ -51,6 +51,25 @@ class EngineModesManager(object):
                 get_telemetry_publisher().publish(MicStateEvent(mode=mode))
             except Exception:
                 pass
+            try:
+                tb = None
+                try:
+                    from caster_user_content.util.taskbar_hud_bridge import get_taskbar_hud_bridge
+                    tb = get_taskbar_hud_bridge()
+                except ImportError:
+                    try:
+                        from util.taskbar_hud_bridge import get_taskbar_hud_bridge
+                        tb = get_taskbar_hud_bridge()
+                    except ImportError:
+                        pass
+                if tb:
+                    tb.send_update(
+                        mic_state=mode,
+                        status="sleeping" if mode in ("sleeping", "off") else "idle",
+                        command="Sleeping" if mode in ("sleeping", "off") else "Ready",
+                    )
+            except Exception:
+                pass
             if self.engine == 'natlink':
                 if natlink is not None:
                     natlink.setMicState(mode)

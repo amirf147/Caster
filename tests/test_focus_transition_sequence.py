@@ -58,6 +58,10 @@ class TestFocusTransitionSequence(unittest.TestCase):
         if not HAS_ADCE_INTEGRATION:
             return
 
+        # Stop background polling threads during test execution to prevent race conditions with live daemon
+        from caster_user_content.util.adce_bridge import adce
+        adce.stop()
+
         maker = MappingRuleMaker(MockTransformerRunner(), MockSmrConfigurer())
 
         rule_term_cls, details_term = get_ide_terminal_rule()

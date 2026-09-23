@@ -143,6 +143,10 @@ INTERNAL_RULE_EXCLUSIONS = frozenset([
     "ccr",
     "ccrmerger",
     "ccrmerger2",
+    "globalccr",
+    "globalccrextended",
+    "globalccrextendedrule",
+    "global_ccr_extended_rule",
     "caster_rule",
     "casterrule",
     "caster_mic_rule",
@@ -180,7 +184,12 @@ def get_adce_context(target_process=None):
             target_proc = str(target_process or "").lower().strip()
 
             # Only return ADCE zone/file if the target process matches the ADCE snapshot process
-            if not target_proc or target_proc == adce_proc or (target_proc in IDE_PROCESS_NAMES and adce_proc in IDE_PROCESS_NAMES):
+            target_proc_bare = target_proc[:-4] if target_proc.endswith(".exe") else target_proc
+            adce_proc_bare = adce_proc[:-4] if adce_proc.endswith(".exe") else adce_proc
+            is_target_ide = (target_proc in IDE_PROCESS_NAMES or target_proc_bare in IDE_PROCESS_NAMES)
+            is_adce_ide = (adce_proc in IDE_PROCESS_NAMES or adce_proc_bare in IDE_PROCESS_NAMES)
+
+            if not target_proc or target_proc == adce_proc or (is_target_ide and is_adce_ide):
                 return {
                     "is_connected": True,
                     "semantic_zone": adce.get_current_zone(),
@@ -231,41 +240,8 @@ def _sync_adce_bridge(zone=None, process=None, title=None, active_file=None, is_
 
 
 def _on_window_focus_changed(process_name, window_title, hwnd=0):
-    """Callback executed when native OS window focus switches."""
-    try:
-        from castervoice.asynch.hud.ipc.client import get_telemetry_publisher
-        from castervoice.asynch.hud.core.events import DesktopContextEvent, ActiveRulesEvent
-
-        # 1. Synchronize ADCE bridge immediately if target process switched away from IDE
-        try:
-            from caster_user_content.util.adce_bridge import IDE_PROCESS_NAMES
-            proc_low = str(process_name or "").lower().strip()
-            if proc_low and not any(ide in proc_low for ide in IDE_PROCESS_NAMES):
-                _sync_adce_bridge(zone="", process=process_name, title=window_title)
-        except Exception:
-            pass
-
-        # 2. Query matching ADCE context
-        adce_ctx = get_adce_context(target_process=process_name)
-        zone = adce_ctx["semantic_zone"] if adce_ctx["is_connected"] else ""
-        active_file = adce_ctx["active_file"] if adce_ctx["is_connected"] else ""
-
-        # 3. Evaluate active contextual rules and publish
-        active = get_active_contextual_rules(target_process=process_name, target_title=window_title, target_hwnd=hwnd)
-        pub = get_telemetry_publisher()
-
-        pub.publish(
-            DesktopContextEvent(
-                process_name=process_name,
-                window_title=window_title,
-                semantic_zone=zone,
-                active_file=active_file,
-                is_connected=adce_ctx["is_connected"],
-            )
-        )
-        pub.publish(ActiveRulesEvent(rules=active))
-    except Exception:
-        pass
+    """Deprecated callback retained for signature compatibility. Focus tracking is handled out-of-process by ADCE."""
+    pass
 
 
 def _on_adce_context_changed(process_name, window_title, semantic_zone, active_file, is_connected=True):
@@ -293,25 +269,34 @@ def _on_adce_context_changed(process_name, window_title, semantic_zone, active_f
                 is_connected=is_connected,
             )
         )
+        active = []
         if is_connected and process_name:
             active = get_active_contextual_rules(target_process=process_name, target_title=window_title)
             pub.publish(ActiveRulesEvent(rules=active))
+
+        # 2. Forward ADCE zone transition and active rules to Taskbar HUD if active
+        try:
+            from caster_user_content.util.taskbar_hud_bridge import get_taskbar_hud_bridge
+            tb = get_taskbar_hud_bridge()
+            if tb:
+                zone_str = semantic_zone if (is_connected and semantic_zone) else "--"
+                rule_str = ", ".join(active) if active else "Global"
+                tb.send_update(adce_zone=zone_str, rules=rule_str)
+        except Exception:
+            pass
     except Exception:
         pass
 
 
 def get_focus_tracker():
-    """Returns the global IFocusTracker instance, starting it and ADCE tracker if not yet running."""
+    """Returns the global desktop context tracker instance (ADCE SSE listener)."""
     global _FOCUS_TRACKER
     if _FOCUS_TRACKER is None:
         with _FOCUS_TRACKER_LOCK:
             if _FOCUS_TRACKER is None:
-                from castervoice.asynch.hud.core.window_tracker import create_window_focus_tracker
                 from castervoice.asynch.hud.core.adce_tracker import get_adce_tracker
-                _FOCUS_TRACKER = create_window_focus_tracker(on_focus_changed=_on_window_focus_changed)
-                _FOCUS_TRACKER.start()
                 try:
-                    get_adce_tracker(on_context_changed=_on_adce_context_changed)
+                    _FOCUS_TRACKER = get_adce_tracker(on_context_changed=_on_adce_context_changed)
                 except Exception:
                     pass
     return _FOCUS_TRACKER
@@ -330,39 +315,247 @@ def get_active_rule_names():
     return rule_names
 
 
+def _extract_context_executables(ctx):
+    """
+    Recursively extracts declared executable strings from AppContext or LogicAndContext.
+    """
+    if ctx is None:
+        return []
+    if hasattr(ctx, "_executable") and ctx._executable:
+        return list(ctx._executable)
+    if hasattr(ctx, "_children"):
+        execs = []
+        for child in ctx._children:
+            sub = _extract_context_executables(child)
+            if sub:
+                execs.extend(sub)
+        return execs
+    return []
+
+
+def _match_executable_precision(proc_candidates, declared_executables):
+    """
+    Universal precision executable matcher.
+    Returns True if any candidate matches any declared executable by stem, filename, or path.
+    Prevents false-positive substring matches (e.g. 'antigravity ide' matching 'antigravity',
+    or 'notepad++' matching 'notepad').
+    """
+    if not declared_executables:
+        return True
+
+    target_stems = set()
+    target_names = set()
+    target_fulls = set()
+    for dec in declared_executables:
+        if not dec:
+            continue
+        d_norm = str(dec).lower().strip().replace('/', '\\')
+        target_fulls.add(d_norm)
+        target_names.add(Path(d_norm).name)
+        target_stems.add(Path(d_norm).stem)
+
+    for p in proc_candidates:
+        if not p:
+            continue
+        p_norm = str(p).lower().strip().replace('/', '\\')
+        p_name = Path(p_norm).name
+        p_stem = Path(p_norm).stem
+
+        # 1. Stem equality (e.g. 'antigravity' == 'antigravity', 'code' == 'code')
+        if p_stem in target_stems:
+            return True
+        # 2. Filename equality (e.g. 'antigravity.exe' == 'antigravity.exe')
+        if p_name in target_names:
+            return True
+        # 3. Full path match or suffix
+        if p_norm in target_fulls or any(p_norm.endswith('\\' + name) for name in target_names):
+            return True
+
+    return False
+
+
+def _get_enabled_rule_classes():
+    """
+    Returns a tuple of (enabled_rcns_set, whitelisted_rcns_set) representing
+    authoritative rule activation state from Caster's live GrammarManager or rules.toml.
+    """
+    try:
+        from castervoice.lib import control
+        nex = control.nexus()
+        if nex and hasattr(nex, "_grammar_manager") and nex._grammar_manager:
+            gm = nex._grammar_manager
+            cfg = getattr(gm, "_config", None)
+            if cfg:
+                enabled = set(cfg.get_enabled_rcns_ordered())
+                whitelisted = set(cfg._config.get("whitelisted", {}).keys())
+                return enabled, whitelisted
+    except Exception:
+        pass
+    try:
+        from castervoice.lib import settings
+        if getattr(settings, "SETTINGS", None) is None:
+            settings.initialize()
+        from castervoice.lib.ctrl.mgr.rules_config import RulesConfig
+        cfg = RulesConfig()
+        enabled = set(cfg.get_enabled_rcns_ordered())
+        whitelisted = set(cfg._config.get("whitelisted", {}).keys())
+        return enabled, whitelisted
+    except Exception:
+        pass
+    return None, None
+
+
+def _format_rcn_display_name(rcn):
+    """Formats a rule class name into a clean display title (e.g. FirefoxCcrRule -> Firefox CCR)."""
+    if not rcn:
+        return ""
+    name = str(rcn).strip()
+    if name.endswith("Rule") and len(name) > 4:
+        name = name[:-4]
+    if name.endswith("Ccr"):
+        name = name[:-3] + " CCR"
+    elif name.endswith("CCR"):
+        name = name[:-3] + " CCR"
+    return name
+
+
+def _resolve_ccr_rcn_from_context(ctx):
+    """
+    Resolves the authoritative Rule Class Name (RCN) for a CCR context by cross-referencing
+    GrammarManager's registered managed rules.
+    """
+    try:
+        from castervoice.lib import control
+        nex = control.nexus()
+        if nex and hasattr(nex, "_grammar_manager") and nex._grammar_manager:
+            gm = nex._grammar_manager
+            managed = getattr(gm, "_managed_rules", {})
+            ctx_execs = getattr(ctx, "_executable", None)
+            if ctx_execs:
+                if isinstance(ctx_execs, (list, tuple, set)):
+                    ctx_exec_set = set(str(x).lower().strip() for x in ctx_execs)
+                else:
+                    ctx_exec_set = {str(ctx_execs).lower().strip()}
+
+                for rcn, mr in managed.items():
+                    rd = mr.get_details()
+                    if rd and rd.declared_ccrtype is not None and rd.executable:
+                        rd_execs = rd.executable
+                        if isinstance(rd_execs, (list, tuple, set)):
+                            rd_exec_set = set(str(x).lower().strip() for x in rd_execs)
+                        else:
+                            rd_exec_set = {str(rd_execs).lower().strip()}
+                        if ctx_exec_set == rd_exec_set:
+                            return rcn
+    except Exception:
+        pass
+    return None
+
+
+def _is_rule_enabled_in_config(rule, enabled_rcns, whitelisted_rcns):
+    """
+    Validates whether a rule is active in Dragonfly and enabled in rules.toml.
+    - Disabled rules in Dragonfly (rule.active is False) return False.
+    - For non-repeater rules, if the rule is registered in Caster's whitelisted config
+      but not present in _enabled_ordered, returns False.
+    - Dynamic CCR RepeatRules check their underlying ccr_rule_class_name against _enabled_ordered.
+    """
+    if getattr(rule, "active", None) is False:
+        return False
+
+    rcn = getattr(rule, "ccr_rule_class_name", None)
+    if not rcn:
+        grammar = getattr(rule, "_grammar", None)
+        if grammar:
+            rcn = getattr(grammar, "ccr_rule_class_name", None)
+
+    if not rcn:
+        rcn = rule.__class__.__name__
+
+    if enabled_rcns is not None:
+        if rcn in enabled_rcns:
+            return True
+        if whitelisted_rcns is not None and rcn in whitelisted_rcns:
+            return False
+        if rcn.lower().startswith("repeater") or rcn == "RepeatRule":
+            return True
+
+    return True
+
+
 def get_active_contextual_rules(target_process=None, target_title=None, target_hwnd=0):
     """
     Returns a list of active application-specific / contextual rule names.
-    If the target window matches application-scoped rules, returns those contextual rules.
+    If target_process is not specified, retrieves the active desktop context from ADCE.
     If only global rules are active, returns an empty list [] (prompting [Global Context] on HUD).
     """
     contextual_rules = []
     seen = set()
 
+    # Query ADCE if target_process is not explicitly supplied
+    if not target_process:
+        try:
+            from caster_user_content.util.adce_bridge import adce
+            if adce.is_connected():
+                adce_proc = adce.get_current_process()
+                if adce_proc:
+                    target_process = adce_proc
+                    if not target_title:
+                        target_title = adce.get_current_title()
+        except Exception:
+            pass
+
     proc_candidates = []
     if target_process:
-        proc_candidates.append(str(target_process).lower().strip())
+        p_clean = str(target_process).lower().strip()
+        proc_candidates.append(p_clean)
+        if not p_clean.endswith(".exe"):
+            proc_candidates.append(p_clean + ".exe")
+        else:
+            bare = p_clean[:-4]
+            if bare and bare not in proc_candidates:
+                proc_candidates.append(bare)
+
     proc_low = str(target_process or "").lower().strip()
+    proc_bare = proc_low[:-4] if proc_low.endswith(".exe") else proc_low
     title_low = str(target_title or "").lower().strip()
-    if proc_low in ("windowsterminal", "conhost", "cmd", "wt"):
+
+    if proc_low in ("windowsterminal", "conhost", "cmd", "wt") or proc_bare in ("windowsterminal", "conhost", "cmd", "wt"):
         if "powershell" in title_low or "pwsh" in title_low:
             proc_candidates.extend(["powershell", "pwsh"])
-    if proc_low == "pwsh" and "powershell" not in proc_candidates:
+    if (proc_low == "pwsh" or proc_bare == "pwsh") and "powershell" not in proc_candidates:
         proc_candidates.append("powershell")
-    if proc_low == "powershell" and "pwsh" not in proc_candidates:
+    if (proc_low == "powershell" or proc_bare == "powershell") and "pwsh" not in proc_candidates:
         proc_candidates.append("pwsh")
-    if proc_low in ("code", "antigravity", "antigravity ide", "cursor", "windsurf", "vscodium", "code - oss"):
-        for ide in ("code", "antigravity", "antigravity ide", "cursor", "windsurf", "vscodium", "code - oss"):
+
+    try:
+        from caster_user_content.util.adce_bridge import IDE_PROCESS_NAMES
+    except Exception:
+        IDE_PROCESS_NAMES = frozenset(["code", "antigravity ide", "cursor", "windsurf", "vscodium", "code - oss"])
+
+    if proc_low in IDE_PROCESS_NAMES or proc_bare in IDE_PROCESS_NAMES:
+        for ide in IDE_PROCESS_NAMES:
             if ide not in proc_candidates:
                 proc_candidates.append(ide)
+
+    has_target = bool(target_process or (proc_candidates and proc_candidates != [""]))
     if not proc_candidates:
         proc_candidates.append("")
+
+    enabled_rcns, whitelisted_rcns = _get_enabled_rule_classes()
 
     engine = get_current_engine()
     if engine and hasattr(engine, "grammars"):
         for grammar in engine.grammars:
             ctx = getattr(grammar, "context", None)
             if ctx is not None:
+                # 1. Universal precision executable matching: prevents false substring prefix matches
+                declared_execs = _extract_context_executables(ctx)
+                if declared_execs and has_target:
+                    if not _match_executable_precision(proc_candidates, declared_execs):
+                        continue
+
+                # 2. Dragonfly context evaluation (titles, dynamic FuncContext predicates)
                 is_match = False
                 for p in proc_candidates:
                     try:
@@ -372,19 +565,44 @@ def get_active_contextual_rules(target_process=None, target_title=None, target_h
                     except Exception:
                         pass
 
-                if not is_match and not target_process:
+                if not is_match and not has_target:
                     try:
-                        is_match = ctx.matches()
+                        from dragonfly import AppContext
+                        if not isinstance(ctx, AppContext):
+                            is_match = ctx.matches()
                     except Exception:
-                        is_match = any(r.active for r in grammar.rules)
+                        pass
 
                 if is_match:
                     for rule in grammar.rules:
+                        # 3. Authoritative rules.toml and active state validation
+                        if not _is_rule_enabled_in_config(rule, enabled_rcns, whitelisted_rcns):
+                            continue
+
                         r_name = str(rule.name).strip()
                         if r_name.lower().startswith("repeater") or r_name == "RepeatRule":
-                            execs = getattr(ctx, "_executable", None)
-                            if execs and isinstance(execs, (list, tuple, set)) and len(execs) > 0:
-                                r_name = str(list(execs)[0]).capitalize()
+                            display = getattr(rule, "ccr_display_name", None)
+                            if not display:
+                                g = getattr(rule, "_grammar", None) or grammar
+                                display = getattr(g, "ccr_display_name", None)
+
+                            if not display:
+                                rcn = getattr(rule, "ccr_rule_class_name", None)
+                                if not rcn:
+                                    g = getattr(rule, "_grammar", None) or grammar
+                                    rcn = getattr(g, "ccr_rule_class_name", None)
+                                if rcn:
+                                    display = _format_rcn_display_name(rcn)
+
+                            if not display:
+                                resolved_rcn = _resolve_ccr_rcn_from_context(ctx)
+                                if resolved_rcn:
+                                    display = _format_rcn_display_name(resolved_rcn)
+
+                            if display:
+                                r_name = display
+                            else:
+                                continue
 
                         if not is_internal_rule_name(r_name):
                             if r_name and r_name not in seen:

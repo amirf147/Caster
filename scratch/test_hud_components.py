@@ -21,12 +21,6 @@ from castervoice.asynch.hud_support import (
     get_active_contextual_rules,
     is_internal_rule_name,
 )
-from castervoice.asynch.hud.core.window_tracker import (
-    IFocusTracker,
-    Win32WindowFocusTracker,
-    NullWindowFocusTracker,
-    create_window_focus_tracker,
-)
 from castervoice.lib.qt import QtWidgets, QtCore
 from castervoice.asynch.hud.ui.widgets.border_controller import BorderController
 from castervoice.asynch.hud.ui.widgets.adce_bar import AdceBarWidget
@@ -64,12 +58,15 @@ class TestHudComponents(unittest.TestCase):
         self.assertFalse(is_internal_rule_name("Git Commit"))
 
     def test_focus_tracker_factory(self):
-        """Verifies that create_window_focus_tracker instantiates a valid IFocusTracker."""
-        tracker = create_window_focus_tracker()
-        self.assertIsInstance(tracker, IFocusTracker)
-        proc, title = tracker.get_foreground_info()
-        self.assertIsInstance(proc, str)
-        self.assertIsInstance(title, str)
+        """Verifies that get_focus_tracker instantiates and returns a valid AdceTracker."""
+        from castervoice.asynch.hud_support import get_focus_tracker
+        from castervoice.asynch.hud.core.adce_tracker import AdceTracker
+        tracker = get_focus_tracker()
+        self.assertIsInstance(tracker, AdceTracker)
+        ctx = tracker.get_current_context()
+        self.assertIn("process_name", ctx)
+        self.assertIn("window_title", ctx)
+        self.assertIn("semantic_zone", ctx)
 
     def test_desktop_context_event_reduction(self):
         state = HudState()
