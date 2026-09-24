@@ -83,8 +83,16 @@ def set_plugin_enabled(plugin_name, enabled=True):
 
 
 def fetch_registry(registry_url=DEFAULT_REGISTRY_URL):
-    """Fetches and parses the remote plugin manifest JSON."""
+    """Fetches and parses the plugin manifest JSON from a local path or remote URL."""
     try:
+        p = Path(registry_url)
+        if p.is_file():
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        if p.is_dir() and (p / "manifest.json").is_file():
+            with open(p / "manifest.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+
         req = urllib.request.Request(
             registry_url, headers={"User-Agent": "Caster-Plugin-CLI/1.0"}
         )
@@ -132,12 +140,12 @@ def cmd_list(args):
             status = "enabled" if is_enabled else "disabled"
             print(f"{name:<20} {info['scope']:<15} {status:<12} {info['path']}")
 
-    # Check remote manifest
-    print("\nRemote Registry Availability:")
+    # Check registry
+    print("\nRemote / Local Registry Availability:")
     print("-" * 65)
     registry = fetch_registry(args.registry)
     if not registry or "plugins" not in registry:
-        print("  (Remote registry unreachable or empty)")
+        print(f"  (Registry at '{args.registry}' unreachable or empty)")
     else:
         for name, details in sorted(registry["plugins"].items()):
             inst_status = "installed" if name in installed else "available"
@@ -152,29 +160,51 @@ def cmd_install(args):
     plugin_name = args.name.strip()
     target_dir = get_user_plugins_dir() / plugin_name
 
-    if target_dir.exists():
+    if target_dir.exists() and not getattr(args, "force", False):
         print(f"Plugin '{plugin_name}' is already installed at {target_dir}.")
         set_plugin_enabled(plugin_name, True)
-        print(f"Ensured '{plugin_name}' is set to true in settings.toml.")
+        print(f"Ensured '{plugin_name}' is set to true in settings.toml. (Use --force to overwrite files)")
         return
 
-    # Check remote registry
+    # 1. Direct local source path override
+    source_dir = None
+    if getattr(args, "source", None):
+        cand = Path(args.source)
+        if cand.exists():
+            source_dir = cand
+
+    # 2. Check registry
     registry = fetch_registry(args.registry)
-    if not registry or "plugins" not in registry or plugin_name not in registry["plugins"]:
-        print(f"Error: Plugin '{plugin_name}' not found in registry {args.registry}.")
-        sys.exit(1)
+    if not source_dir:
+        if not registry or "plugins" not in registry or plugin_name not in registry["plugins"]:
+            print(f"Error: Plugin '{plugin_name}' not found in registry {args.registry}.")
+            sys.exit(1)
 
-    details = registry["plugins"][plugin_name]
-    repo_base = registry.get("repository", "https://github.com/amirf147/caster-plugins")
-    subpath = details.get("path", f"plugins/{plugin_name}")
+        details = registry["plugins"][plugin_name]
+        subpath = details.get("path", f"plugins/{plugin_name}")
 
-    print(f"Installing '{plugin_name}' from {repo_base}/{subpath}...")
-    # Create empty directory with template if remote downloading is not supported offline
-    target_dir.mkdir(parents=True, exist_ok=True)
-    init_file = target_dir / "__init__.py"
-    if not init_file.exists():
-        with open(init_file, "w", encoding="utf-8") as f:
-            f.write(f'"""Plugin {plugin_name}"""\n')
+        # Check if registry is local file or dir
+        reg_p = Path(args.registry)
+        reg_base = reg_p.parent if reg_p.is_file() else reg_p
+        if (reg_base / subpath).exists():
+            source_dir = reg_base / subpath
+
+    if source_dir and source_dir.exists():
+        print(f"Installing '{plugin_name}' from local source: {source_dir}...")
+        if source_dir.is_dir():
+            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
+        else:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_dir, target_dir)
+    else:
+        repo_base = registry.get("repository", "https://github.com/amirf147/caster-plugins") if registry else ""
+        subpath = registry["plugins"][plugin_name].get("path", f"plugins/{plugin_name}") if registry else ""
+        print(f"Installing '{plugin_name}' from {repo_base}/{subpath}...")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        init_file = target_dir / "__init__.py"
+        if not init_file.exists():
+            with open(init_file, "w", encoding="utf-8") as f:
+                f.write(f'"""Plugin {plugin_name}"""\n')
 
     set_plugin_enabled(plugin_name, True)
     print(f"Plugin '{plugin_name}' installed and enabled successfully in settings.toml.")
@@ -213,6 +243,10 @@ def main():
     # install
     p_inst = subparsers.add_parser("install", help="Install a plugin by name")
     p_inst.add_argument("name", help="Name of plugin to install")
+    p_inst.add_argument("--source", help="Optional local path of plugin to install from")
+    p_inst.add_argument(
+        "--force", action="store_true", help="Overwrite existing plugin files if already installed"
+    )
 
     # remove
     p_rem = subparsers.add_parser("remove", help="Disable and remove a plugin")

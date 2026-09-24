@@ -68,19 +68,7 @@ class ActiveRulesBarWidget(QtWidgets.QWidget):
         lbl.setStyleSheet("color: #60a5fa; font-size: 7.5pt;")
         self._layout.addWidget(lbl)
 
-        # 1. Sleeping State: Indicate microphone sleep and suppress application rules
-        if state_clean == "sleeping" or state_clean == "off":
-            sleep_pill = QtWidgets.QLabel("[Microphone Sleeping]")
-            sleep_pill.setStyleSheet(
-                "background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; "
-                "font-size: 7.5pt; font-weight: bold; border-radius: 2px; padding: 1px 5px; "
-                "border: 1px solid rgba(239, 68, 68, 0.35);"
-            )
-            self._layout.addWidget(sleep_pill)
-            self._layout.addStretch()
-            return
-
-        # 2. Active State: Global Context fallback
+        # 1. Global Context fallback when no active application rules match
         if not rule_tuple:
             default_pill = QtWidgets.QLabel("[Global Context]")
             default_pill.setStyleSheet(
@@ -90,7 +78,7 @@ class ActiveRulesBarWidget(QtWidgets.QWidget):
             )
             self._layout.addWidget(default_pill)
         else:
-            # 3. Active State: Display up to 5 rules cleanly with overflow counter
+            # 2. Display up to 5 rules cleanly with overflow counter
             max_display = 5
             display_rules = rule_tuple[:max_display]
             for rule in display_rules:

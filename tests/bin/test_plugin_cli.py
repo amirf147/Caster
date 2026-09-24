@@ -33,6 +33,19 @@ class TestPluginCLI(unittest.TestCase):
             result = plugin_cli.fetch_registry("https://invalid.example.com/manifest.json")
             self.assertIsNone(result)
 
+    def test_fetch_local_registry(self):
+        """Verifies fetch_registry reads a local JSON file."""
+        import tempfile, json
+        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as f:
+            json.dump({"plugins": {"test_plug": {"version": "1.0"}}}, f)
+            temp_path = f.name
+        try:
+            reg = plugin_cli.fetch_registry(temp_path)
+            self.assertIsNotNone(reg)
+            self.assertIn("test_plug", reg.get("plugins", {}))
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
 
 if __name__ == "__main__":
     unittest.main()

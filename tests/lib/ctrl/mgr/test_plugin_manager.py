@@ -42,10 +42,7 @@ class TestPluginManager(unittest.TestCase):
             "plugins": {
                 "dummy": True,
                 "disabled_dummy": False,
-                "adce": True,
-                "taskbar_hud": True,
-                "themed_hud": True,
-                "standard_hud": False,
+                "standard_hud": True,
             }
         }
         self.manager = PluginManager(nexus=self.mock_nexus, settings_dict=self.settings)
@@ -67,18 +64,28 @@ class TestPluginManager(unittest.TestCase):
         self.assertTrue(p.stop_called)
         self.assertFalse(p.is_running)
 
-    def test_load_builtin_plugins(self):
-        """Verifies PluginManager discovers and instantiates enabled built-in plugins."""
-        self.manager.load_plugins()
-
-        # Enabled plugins should be loaded
-        self.assertIsNotNone(self.manager.get_plugin("adce"))
-        self.assertIsNotNone(self.manager.get_plugin("taskbar_hud"))
-        self.assertIsNotNone(self.manager.get_plugin("themed_hud"))
-
-        # Disabled plugins should not be loaded
-        self.assertIsNone(self.manager.get_plugin("standard_hud"))
-        self.assertIsNone(self.manager.get_plugin("sikuli"))
+    def test_load_plugins_from_directory(self):
+        """Verifies PluginManager discovers and instantiates enabled plugins from a directory."""
+        import tempfile, shutil
+        from pathlib import Path
+        temp_dir = tempfile.mkdtemp()
+        try:
+            plug_dir = Path(temp_dir) / "test_plugin"
+            plug_dir.mkdir()
+            with open(plug_dir / "__init__.py", "w", encoding="utf-8") as f:
+                f.write(
+                    "from castervoice.lib.plugin import PluginBase\n"
+                    "class TestPlug(PluginBase):\n"
+                    "    name = 'test_plugin'\n"
+                    "def get_plugin():\n"
+                    "    return TestPlug()\n"
+                )
+            mgr = PluginManager(nexus=self.mock_nexus, settings_dict={"plugins": {"test_plugin": True}})
+            mgr.load_plugins(plugin_dirs=[temp_dir])
+            self.assertIsNotNone(mgr.get_plugin("test_plugin"))
+            self.assertEqual(mgr.get_plugin("test_plugin").name, "test_plugin")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def test_plugin_start_and_stop(self):
         """Verifies PluginManager starts and stops loaded plugins."""

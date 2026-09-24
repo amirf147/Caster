@@ -34,6 +34,18 @@ if control.nexus() is None:
     _content_loader = ContentLoader(_crg, importlib.import_module, _rp.get_reload_fn(), _sma)
     control.init_nexus(_content_loader)
 
+    if settings.SETTINGS.get("sikuli", {}).get("enabled", False):
+        from castervoice.asynch.sikuli import sikuli_controller
+        sikuli_controller.get_instance().bootstrap_start_server_proxy()
+
+    if get_current_engine().name != "text":
+        from castervoice.asynch import hud_support
+        hud_support.start_hud()
+
+    from castervoice.asynch import hud_support
+    dh = printer.get_delegating_handler()
+    dh.register_handler(hud_support.HudPrintMessageHandler())
+
     _plugin_manager = PluginManager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
     _plugin_manager.load_plugins()
 

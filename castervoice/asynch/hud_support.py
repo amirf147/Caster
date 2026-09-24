@@ -402,15 +402,11 @@ def _resolve_ccr_rcn_from_context(ctx):
 
 def _is_rule_enabled_in_config(rule, enabled_rcns, whitelisted_rcns):
     """
-    Validates whether a rule is active in Dragonfly and enabled in rules.toml.
-    - Disabled rules in Dragonfly (rule.active is False) return False.
+    Validates whether a rule is enabled in rules.toml.
     - For non-repeater rules, if the rule is registered in Caster's whitelisted config
       but not present in _enabled_ordered, returns False.
     - Dynamic CCR RepeatRules check their underlying ccr_rule_class_name against _enabled_ordered.
     """
-    if getattr(rule, "active", None) is False:
-        return False
-
     rcn = getattr(rule, "ccr_rule_class_name", None)
     if not rcn:
         grammar = getattr(rule, "_grammar", None)

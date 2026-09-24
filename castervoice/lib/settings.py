@@ -367,11 +367,8 @@ def _get_defaults():
             "default_hooks": ['PrinterHook', 'RulesLoadedHook'],
         },
 
-        # Plugin activation settings (default in-tree plugins)
-        "plugins": {
-            "standard_hud": True,
-            "sikuli": False,
-        },
+        # Plugin activation settings
+        "plugins": {},
 
         # miscellaneous section
         "miscellaneous": {
