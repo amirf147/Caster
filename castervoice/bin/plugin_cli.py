@@ -42,9 +42,6 @@ def get_default_registry():
             return str(cfg.get("registry_url"))
     except Exception:
         pass
-    default_local = Path.home() / "Documents" / "repos" / "caster-plugins" / "manifest.json"
-    if default_local.is_file():
-        return str(default_local)
     return DEFAULT_REGISTRY_URL
 
 

@@ -14,6 +14,7 @@ class PluginBase(object):
     name = "base_plugin"
     version = "0.1.0"
     description = "Base Caster Plugin"
+    aliases = []  # Optional spoken phrases or alternate names for voice commands
 
     def __init__(self):
         self._nexus = None
