@@ -34,6 +34,21 @@ class EngineModesManager(object):
         # Sets 1st index key ("normal" or "command") depending on engine type as default mode
         self.engine_state = self.previous_engine_state = next(
             iter(self.engine_modes.keys()))
+        self._mic_listeners = []
+
+    def add_mic_listener(self, listener):
+        """
+        Registers a callback listener(mode: str) to be called on microphone mode transitions.
+        """
+        if listener not in self._mic_listeners:
+            self._mic_listeners.append(listener)
+
+    def remove_mic_listener(self, listener):
+        """
+        Unregisters a previously registered mic mode listener.
+        """
+        if listener in self._mic_listeners:
+            self._mic_listeners.remove(listener)
 
     def set_mic_mode(self, mode):
         """
@@ -45,6 +60,11 @@ class EngineModesManager(object):
         """
         if mode in self.mic_modes:
             self.mic_state = mode
+            for listener in list(self._mic_listeners):
+                try:
+                    listener(mode)
+                except Exception as ex:
+                    printer.out("Caster: mic listener error: {}".format(ex))
             if self.engine == 'natlink':
                 if natlink is not None:
                     natlink.setMicState(mode)
