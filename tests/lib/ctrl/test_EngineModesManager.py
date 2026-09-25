@@ -39,3 +39,49 @@ class TestEngineModesManager(TestCase):
     def test_set_mic_mode(self):
         self._manager.set_mic_mode(mode="sleeping")
         self.assertEqual("sleeping", self._manager.get_mic_mode())
+
+    def test_add_and_trigger_mic_listener(self):
+        events = []
+        def listener(mode):
+            events.append(mode)
+
+        self._manager.add_mic_listener(listener)
+        self._manager.set_mic_mode("sleeping")
+        self._manager.set_mic_mode("on")
+        self.assertEqual(["sleeping", "on"], events)
+
+    def test_remove_mic_listener(self):
+        events = []
+        def listener(mode):
+            events.append(mode)
+
+        self._manager.add_mic_listener(listener)
+        self._manager.set_mic_mode("sleeping")
+        self._manager.remove_mic_listener(listener)
+        self._manager.set_mic_mode("on")
+        self.assertEqual(["sleeping"], events)
+
+    def test_duplicate_mic_listener_registration(self):
+        events = []
+        def listener(mode):
+            events.append(mode)
+
+        self._manager.add_mic_listener(listener)
+        self._manager.add_mic_listener(listener)
+        self._manager.set_mic_mode("sleeping")
+        self.assertEqual(["sleeping"], events)
+
+    def test_broken_mic_listener_isolated(self):
+        def broken_listener(mode):
+            raise RuntimeError("listener failure")
+
+        events = []
+        def good_listener(mode):
+            events.append(mode)
+
+        self._manager.add_mic_listener(broken_listener)
+        self._manager.add_mic_listener(good_listener)
+        # Should not raise exception
+        self._manager.set_mic_mode("sleeping")
+        self.assertEqual("sleeping", self._manager.get_mic_mode())
+        self.assertEqual(["sleeping"], events)
