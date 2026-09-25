@@ -38,18 +38,37 @@ if control.nexus() is None:
         from castervoice.asynch.sikuli import sikuli_controller
         sikuli_controller.get_instance().bootstrap_start_server_proxy()
 
-    if get_current_engine().name != "text":
-        from castervoice.asynch import hud_support
-        hud_support.start_hud()
-
-    from castervoice.asynch import hud_support
-    dh = printer.get_delegating_handler()
-    dh.register_handler(hud_support.HudPrintMessageHandler())
-
-    _plugin_manager = PluginManager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
+    from castervoice.lib.ctrl.mgr.plugin_manager import get_plugin_manager
+    _plugin_manager = get_plugin_manager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
     _plugin_manager.load_plugins()
+
+    if get_current_engine().name != "text" and settings.SETTINGS.get("hud", {}).get("enabled", True):
+        from castervoice.asynch import hud_support
+        dh = printer.get_delegating_handler()
+        if not dh.has_handler(hud_support.HudPrintMessageHandler):
+            dh.register_handler(hud_support.HudPrintMessageHandler())
+        if not any(getattr(p, "replaces_hud", False) for p in _plugin_manager.get_loaded_plugins()):
+            hud_support.start_hud()
 
     EngineConfigLate() # Requires grammars to be loaded and nexus
     _plugin_manager.start_plugins()
+
+    import atexit
+
+    def _shutdown_caster():
+        try:
+            from castervoice.lib.ctrl.mgr.plugin_manager import get_plugin_manager
+            pm = get_plugin_manager()
+            if pm:
+                pm.stop_plugins()
+        except Exception:
+            pass
+        try:
+            from castervoice.asynch import hud_support
+            hud_support.stop_hud()
+        except Exception:
+            pass
+
+    atexit.register(_shutdown_caster)
 
 printer.out("\n") # Force update to display text

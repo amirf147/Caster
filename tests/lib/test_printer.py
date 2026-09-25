@@ -94,3 +94,20 @@ class TestPrinter(unittest.TestCase):
 
         # assert that the default handler still printed the message despite the error
         self.assertEqual("asdf", args_capturer.captured_args[0])
+
+    def test_unregister_handler(self):
+        """Verifies handlers can be unregistered cleanly."""
+        handler = SimplePrintMessageHandler()
+        self._delegating_handler.register_handler(handler)
+        self.assertTrue(self._delegating_handler.has_handler(handler))
+        self.assertTrue(self._delegating_handler.has_handler(SimplePrintMessageHandler))
+
+        self._delegating_handler.unregister_handler(handler)
+        self.assertFalse(self._delegating_handler.has_handler(handler))
+
+    def test_idempotent_registration(self):
+        """Verifies duplicate registrations of the same handler instance are ignored."""
+        handler = SimplePrintMessageHandler()
+        self._delegating_handler.register_handler(handler)
+        self._delegating_handler.register_handler(handler)
+        self.assertEqual(len(self._delegating_handler._handlers), 1)

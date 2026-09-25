@@ -246,6 +246,83 @@ class PluginManager(object):
             except Exception as ex:
                 _logger.exception("Error stopping plugin '%s':", name)
 
+    def load_plugin(self, name):
+        """Loads and starts a single plugin dynamically."""
+        if name in self._plugins and self._plugins[name].is_running:
+            return True, "Plugin '{}' is already running.".format(name)
+
+        plugin_file = None
+        for directory in self._default_plugin_directories():
+            cand_dir = os.path.join(directory, name)
+            if os.path.isdir(cand_dir):
+                cand_py = os.path.join(cand_dir, "plugin.py")
+                cand_init = os.path.join(cand_dir, "__init__.py")
+                if os.path.isfile(cand_py):
+                    plugin_file = cand_py
+                    break
+                elif os.path.isfile(cand_init):
+                    plugin_file = cand_init
+                    break
+            cand_file = os.path.join(directory, "{}.py".format(name))
+            if os.path.isfile(cand_file):
+                plugin_file = cand_file
+                break
+
+        if not plugin_file:
+            return False, "Plugin '{}' not found in plugin directories.".format(name)
+
+        self._enabled_names.add(name)
+        plugins_config = self._settings.get("plugins", {})
+        self._load_plugin_file(name, plugin_file, plugins_config.get(name, {}))
+
+        plugin = self._plugins.get(name)
+        if not plugin:
+            return False, "Failed to instantiate plugin '{}'.".format(name)
+
+        try:
+            if getattr(plugin, "replaces_hud", False):
+                from castervoice.asynch import hud_support
+                hud_support.stop_hud()
+
+            plugin.start()
+            _logger.info("Plugin '%s' dynamically started.", name)
+            return True, "Plugin '{}' loaded and started successfully.".format(name)
+        except Exception as ex:
+            _logger.exception("Error starting plugin '%s':", name)
+            return False, "Error starting plugin '{}': {}".format(name, ex)
+
+    def unload_plugin(self, name):
+        """Stops and unloads a single plugin dynamically."""
+        plugin = self._plugins.get(name)
+        if not plugin:
+            return False, "Plugin '{}' is not currently loaded.".format(name)
+
+        try:
+            if plugin.is_running:
+                plugin.stop()
+            self._plugins.pop(name, None)
+            if name in self._enabled_names:
+                self._enabled_names.remove(name)
+
+            _logger.info("Plugin '%s' stopped and unloaded.", name)
+            return True, "Plugin '{}' stopped and unloaded.".format(name)
+        except Exception as ex:
+            _logger.exception("Error unloading plugin '%s':", name)
+            return False, "Error unloading plugin '{}': {}".format(name, ex)
+
+    def reload_all(self):
+        """Stops all running plugins, refreshes settings, and reloads all enabled plugins."""
+        self.stop_plugins()
+        self._plugins.clear()
+        try:
+            from castervoice.lib import settings
+            self._settings = settings.SETTINGS
+        except Exception:
+            pass
+        self.load_plugins()
+        self.start_plugins()
+        return True, "Reloaded all plugins: {}".format(", ".join(self._plugins.keys()) or "none")
+
 
 _GLOBAL_PLUGIN_MANAGER = None
 

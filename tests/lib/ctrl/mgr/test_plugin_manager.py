@@ -123,6 +123,56 @@ class TestPluginManager(unittest.TestCase):
             self.manager._nexus._grammar_manager.add_rule(r)
         self.manager._nexus._grammar_manager.add_rule.assert_called_once_with(DummyVoiceRule)
 
+    def test_dynamic_load_and_unload_plugin(self):
+        """Verifies PluginManager dynamically loads, starts, stops, and unloads plugins."""
+        dummy = DummyPlugin()
+        self.manager._plugins["dummy"] = dummy
+        dummy.start()
+        self.assertTrue(dummy.is_running)
+
+        success, msg = self.manager.unload_plugin("dummy")
+        self.assertTrue(success)
+        self.assertTrue(dummy.stop_called)
+        self.assertFalse(dummy.is_running)
+        self.assertIsNone(self.manager.get_plugin("dummy"))
+
+    def test_replaces_hud_plugin_load_stops_current_hud(self):
+        """Verifies loading a HUD replacement plugin stops the running HUD first."""
+        from unittest.mock import patch
+        class HudPlugin(PluginBase):
+            name = "custom_hud"
+            replaces_hud = True
+
+        plugin = HudPlugin()
+        self.manager._plugins["custom_hud"] = plugin
+        with patch("castervoice.asynch.hud_support.stop_hud") as mock_stop:
+            with patch.object(self.manager, "_default_plugin_directories", return_value=["/fake/dir"]):
+                # Trigger dynamic load flow
+                with patch.object(self.manager, "_load_plugin_file"):
+                    with patch("os.path.isfile", return_value=True):
+                        with patch("os.path.isdir", return_value=True):
+                            success, msg = self.manager.load_plugin("custom_hud")
+                            self.assertTrue(success)
+                            mock_stop.assert_called_once()
+                            self.assertTrue(plugin.is_running)
+
+    def test_replaces_hud_plugin_unload_does_not_auto_restore_standard_hud(self):
+        """Verifies unloading a HUD replacement plugin does not automatically pop up standard HUD."""
+        from unittest.mock import patch
+        class HudPlugin(PluginBase):
+            name = "custom_hud"
+            replaces_hud = True
+
+        plugin = HudPlugin()
+        self.manager._plugins["custom_hud"] = plugin
+        plugin.start()
+        self.manager._settings = {"hud": {"enabled": True}}
+
+        with patch("castervoice.asynch.hud_support.start_hud") as mock_start:
+            success, msg = self.manager.unload_plugin("custom_hud")
+            self.assertTrue(success)
+            mock_start.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

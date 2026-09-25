@@ -1,20 +1,16 @@
 #! python
 '''
-Caster HUD Window Entry Point.
-Modular, reactive, themeable desktop heads-up display subsystem.
-Compatible with Python 2.7 and Python 3.x.
+Caster HUD Window module
 '''
 # pylint: disable=import-error,no-name-in-module
+import html
+import json
 import os
 import signal
 import sys
 import threading
-
-try:
-    from xmlrpc.server import SimpleXMLRPCServer
-except ImportError:
-    from SimpleXMLRPCServer import SimpleXMLRPCServer  # Python 2 fallback
-
+import dragonfly
+from xmlrpc.server import SimpleXMLRPCServer
 try:  # Style C -- may be imported into Caster, or externally
     BASE_PATH = os.path.realpath(__file__).rsplit(os.path.sep + "castervoice", 1)[0]
     if BASE_PATH not in sys.path:
@@ -22,285 +18,224 @@ try:  # Style C -- may be imported into Caster, or externally
 finally:
     from castervoice.lib.merge.communication import Communicator
     from castervoice.lib import settings
-    from castervoice.lib.qt import QtCore, QtWidgets, qapp_exec
-    from castervoice.asynch.hud.core import constants
-    from castervoice.asynch.hud.core.events import (
-        RecognitionEvent,
-        MicStateEvent,
-        ThemeChangeEvent,
-        ClearHistoryEvent,
-        ActiveRulesEvent,
-    )
-    from castervoice.asynch.hud.ipc.server import IpcServerThread
-    from castervoice.asynch.hud.ui.main_window import MainWindow
+    from castervoice.lib.qt import QtCore, QtGui, QtWidgets, qt_attr, qapp_exec
+
+QApplication = QtWidgets.QApplication
+QMainWindow = QtWidgets.QMainWindow
+QTextEdit = QtWidgets.QTextEdit
+QTreeView = QtWidgets.QTreeView
+QVBoxLayout = QtWidgets.QVBoxLayout
+QWidget = QtWidgets.QWidget
+
+WINDOW_STAYS_ON_TOP_HINT = qt_attr(
+    QtCore,
+    ("Qt", "WindowStaysOnTopHint"),
+    ("Qt", "WindowType", "WindowStaysOnTopHint"),
+)
+TEXT_CURSOR_END = qt_attr(
+    QtGui,
+    ("QTextCursor", "End"),
+    ("QTextCursor", "MoveOperation", "End"),
+)
+
+CLEAR_HUD_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
+HIDE_HUD_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
+SHOW_HUD_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
+HIDE_RULES_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
+SHOW_RULES_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
+SEND_COMMAND_EVENT = QtCore.QEvent.Type(QtCore.QEvent.registerEventType(-1))
 
 
-class SignalBridge(QtCore.QObject):
-    """
-    Thread-safe bridge that routes background IPC and XML-RPC requests directly into the Qt GUI thread.
-    """
-    event_dispatched = QtCore.Signal(object)
-    show_help_requested = QtCore.Signal()
-    hide_help_requested = QtCore.Signal()
-    show_rules_requested = QtCore.Signal(str)
-    hide_rules_requested = QtCore.Signal()
-    show_hud_requested = QtCore.Signal()
-    hide_hud_requested = QtCore.Signal()
-    toggle_border_requested = QtCore.Signal()
-    toggle_drag_requested = QtCore.Signal()
-    toggle_scrollbars_requested = QtCore.Signal()
-    toggle_status_bar_requested = QtCore.Signal()
-    toggle_rules_bar_requested = QtCore.Signal()
-    toggle_adce_requested = QtCore.Signal()
-    toggle_verbose_requested = QtCore.Signal()
-    font_increase_requested = QtCore.Signal()
-    font_decrease_requested = QtCore.Signal()
-    font_reset_requested = QtCore.Signal()
-    save_profile_requested = QtCore.Signal(str)
-    load_profile_requested = QtCore.Signal(str)
-    show_profile_dialog_requested = QtCore.Signal(str)
-    show_theme_dialog_requested = QtCore.Signal()
-    set_opacity_requested = QtCore.Signal(float)
-    set_background_opacity_requested = QtCore.Signal(float)
-    set_text_opacity_requested = QtCore.Signal(float)
-    set_text_alignment_requested = QtCore.Signal(str)
-    set_theme_requested = QtCore.Signal(str)
-    cycle_theme_requested = QtCore.Signal()
-    clear_hud_requested = QtCore.Signal()
+class RPCEvent(QtCore.QEvent):
+
+    def __init__(self, type, text):
+        QtCore.QEvent.__init__(self, type)
+        self._text = text
+
+    @property
+    def text(self):
+        return self._text
+
+
+class RulesWindow(QWidget):
+
+    _WIDTH = 600
+    _MARGIN = 30
+
+    def __init__(self, text):
+        QWidget.__init__(self, f=WINDOW_STAYS_ON_TOP_HINT)
+        x = dragonfly.monitors[0].rectangle.dx - (RulesWindow._WIDTH + RulesWindow._MARGIN)
+        y = 300
+        dx = RulesWindow._WIDTH
+        dy = dragonfly.monitors[0].rectangle.dy - (y + 2 * RulesWindow._MARGIN)
+        self.setGeometry(x, y, dx, dy)
+        self.setWindowTitle("Active Rules")
+        rules_tree = QtGui.QStandardItemModel()
+        rules_tree.setColumnCount(2)
+        rules_tree.setHorizontalHeaderLabels(['phrase', 'action'])
+        rules_dict = json.loads(text)
+        rules = rules_tree.invisibleRootItem()
+        for g in rules_dict:
+            gram = QtGui.QStandardItem(g["name"]) if len(g["rules"]) > 1 else None
+            for r in g["rules"]:
+                rule = QtGui.QStandardItem(r["name"])
+                rule.setRowCount(len(r["specs"]))
+                rule.setColumnCount(2)
+                row = 0
+                for s in r["specs"]:
+                    phrase, _, action = s.partition('::')
+                    rule.setChild(row, 0, QtGui.QStandardItem(phrase))
+                    rule.setChild(row, 1, QtGui.QStandardItem(action))
+                    row += 1
+                if gram is None:
+                    rules.appendRow(rule)
+                else:
+                    gram.appendRow(rule)
+            if gram:
+                rules.appendRow(gram)
+        tree_view = QTreeView(self)
+        tree_view.setModel(rules_tree)
+        tree_view.setColumnWidth(0, RulesWindow._WIDTH // 2)
+        layout = QVBoxLayout()
+        layout.addWidget(tree_view)
+        self.setLayout(layout)
+
+
+class HUDWindow(QMainWindow):
+
+    _WIDTH = 300
+    _HEIGHT = 200
+    _MARGIN = 30
+
+    def __init__(self, server):
+        QMainWindow.__init__(self, flags=WINDOW_STAYS_ON_TOP_HINT)
+        x = dragonfly.monitors[0].rectangle.dx - (HUDWindow._WIDTH + HUDWindow._MARGIN)
+        y = HUDWindow._MARGIN
+        dx = HUDWindow._WIDTH
+        dy = HUDWindow._HEIGHT
+        self.server = server
+        self.setup_xmlrpc_server()
+        self.setGeometry(x, y, dx, dy)
+        self.setWindowTitle(settings.HUD_TITLE)
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.setCentralWidget(self.output)
+        self.rules_window = None
+        self.commands_count = 0
+
+    def event(self, event):
+        if event.type() == SHOW_HUD_EVENT:
+            self.show()
+            return True
+        if event.type() == HIDE_HUD_EVENT:
+            self.hide()
+            return True
+        if event.type() == SHOW_RULES_EVENT:
+            self.rules_window = RulesWindow(event.text)
+            self.rules_window.show()
+            return True
+        if event.type() == HIDE_RULES_EVENT and self.rules_window:
+            self.rules_window.close()
+            self.rules_window = None
+            return True
+        if event.type() == SEND_COMMAND_EVENT:
+            escaped_text = html.escape(event.text)
+            if escaped_text.startswith('$'):
+                formatted_text = '<font color="blue">&lt;</font><b>{}</b>'.format(escaped_text[1:])
+                if self.commands_count == 0:
+                    self.output.setHtml(formatted_text)
+                else:
+                    # self.output.append('<br>')
+                    self.output.append(formatted_text)
+                cursor = self.output.textCursor()
+                cursor.movePosition(TEXT_CURSOR_END)
+                self.output.setTextCursor(cursor)
+                self.output.ensureCursorVisible()
+                self.commands_count += 1
+                if self.commands_count == 50:
+                    self.commands_count = 0
+                return True
+            if escaped_text.startswith('@'):
+                formatted_text = '<font color="purple">&gt;</font><b>{}</b>'.format(escaped_text[1:])
+            elif escaped_text.startswith(''):
+                formatted_text = '<font color="red">&gt;</font>{}'.format(escaped_text)
+            else:
+                formatted_text = escaped_text
+            self.output.append(formatted_text)
+            self.output.ensureCursorVisible()
+            return True
+        if event.type() == CLEAR_HUD_EVENT:
+            self.commands_count = 0
+            return True
+        return QMainWindow.event(self, event)
+
+    def closeEvent(self, event):
+        event.accept()
+
+    def setup_xmlrpc_server(self):
+        self.server.register_function(self.xmlrpc_clear, "clear_hud")
+        self.server.register_function(self.xmlrpc_ping, "ping")
+        self.server.register_function(self.xmlrpc_hide_hud, "hide_hud")
+        self.server.register_function(self.xmlrpc_hide_rules, "hide_rules")
+        self.server.register_function(self.xmlrpc_kill, "kill")
+        self.server.register_function(self.xmlrpc_send, "send")
+        self.server.register_function(self.xmlrpc_show_hud, "show_hud")
+        self.server.register_function(self.xmlrpc_show_rules, "show_rules")
+        server_thread = threading.Thread(target=self.server.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+
+
+    def xmlrpc_clear(self):
+        QtCore.QCoreApplication.postEvent(self, QtCore.QEvent(CLEAR_HUD_EVENT))
+        return 0
+
+    def xmlrpc_ping(self):
+        return 0
+
+    def xmlrpc_hide_hud(self):
+        QtCore.QCoreApplication.postEvent(self, QtCore.QEvent(HIDE_HUD_EVENT))
+        return 0
+
+    def xmlrpc_show_hud(self):
+        QtCore.QCoreApplication.postEvent(self, QtCore.QEvent(SHOW_HUD_EVENT))
+        return 0
+
+    def xmlrpc_hide_rules(self):
+        QtCore.QCoreApplication.postEvent(self, QtCore.QEvent(HIDE_RULES_EVENT))
+        return 0
+
+    def xmlrpc_kill(self):
+        QApplication.quit()
+
+    def xmlrpc_send(self, text):
+        QtCore.QCoreApplication.postEvent(self, RPCEvent(SEND_COMMAND_EVENT, text))
+        return len(text)
+
+    def xmlrpc_show_rules(self, text):
+        QtCore.QCoreApplication.postEvent(self, RPCEvent(SHOW_RULES_EVENT, text))
+        return len(text)
 
 
 def handler(signum, frame):
-    """Prevents unhandled exceptions on termination signal."""
+    """
+    This handler doesn't stop the application when ^C is pressed,
+    but it prevents exceptions being thrown when later
+    the application is terminated from GUI.  Normally, HUD is started
+    by the recognition process and can't be killed from shell prompt,
+    in which case this handler is not needed.
+    """
     pass
 
 
-def main():
-    signal.signal(signal.SIGINT, handler)
-    settings.initialize()
-    user_config = settings.SETTINGS.get("hud", {}) if (settings.SETTINGS and "hud" in settings.SETTINGS) else {}
-    merged_config = constants.merge_hud_config(user_config)
-
-    app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow(initial_config=merged_config)
-    window.show()
-
-    # Qt Signal Bridge
-    bridge = SignalBridge()
-    bridge.event_dispatched.connect(window.dispatch_event)
-    bridge.show_help_requested.connect(window.show_help_dialog)
-    bridge.hide_help_requested.connect(window.hide_help_dialog)
-    bridge.show_rules_requested.connect(window.show_rules_dialog)
-    bridge.hide_rules_requested.connect(window.hide_rules_dialog)
-    bridge.show_hud_requested.connect(window.show_and_raise)
-    bridge.hide_hud_requested.connect(window.hide)
-    bridge.toggle_border_requested.connect(window.toggle_border)
-    bridge.toggle_drag_requested.connect(window.toggle_drag_mode)
-    bridge.toggle_scrollbars_requested.connect(window.toggle_scrollbars)
-    bridge.toggle_status_bar_requested.connect(window.toggle_status_bar)
-    bridge.toggle_rules_bar_requested.connect(window.toggle_active_rules_bar)
-    bridge.toggle_adce_requested.connect(window.toggle_adce_bar)
-    bridge.toggle_verbose_requested.connect(window.toggle_verbose_mode)
-    bridge.font_increase_requested.connect(window.increase_font)
-    bridge.font_decrease_requested.connect(window.decrease_font)
-    bridge.font_reset_requested.connect(window.reset_font)
-    bridge.save_profile_requested.connect(window.save_named_profile)
-    bridge.load_profile_requested.connect(window.load_named_profile)
-    bridge.show_profile_dialog_requested.connect(window.show_profile_dialog)
-    bridge.show_theme_dialog_requested.connect(window.show_theme_dialog)
-    bridge.set_opacity_requested.connect(window.set_opacity)
-    bridge.set_background_opacity_requested.connect(window.set_background_opacity)
-    bridge.set_text_opacity_requested.connect(window.set_text_opacity)
-    bridge.set_text_alignment_requested.connect(window.set_text_alignment)
-    bridge.set_theme_requested.connect(window.apply_theme)
-    bridge.cycle_theme_requested.connect(window.cycle_theme)
-    bridge.clear_hud_requested.connect(window.clear_history)
-
-    # 1. Start Async ndjson IPC Server (High-performance telemetry stream on port 8339)
-    ipc_port = int(merged_config.get("port", constants.DEFAULT_HUD_PORT))
-    ipc_server = IpcServerThread(port=ipc_port, on_event=lambda ev: bridge.event_dispatched.emit(ev))
-    ipc_server.start()
-
-    # 2. Start Legacy XML-RPC Server (100% Backward Compatibility on port 8338)
-    rpc_port = int(Communicator().com_registry.get("hud", constants.DEFAULT_HUD_RPC_PORT))
-    rpc_server_address = (Communicator.LOCALHOST, rpc_port)
-    xmlrpc_server = SimpleXMLRPCServer(rpc_server_address, logRequests=False, allow_none=True)
-    _setup_xmlrpc_methods(xmlrpc_server, bridge)
-    rpc_thread = threading.Thread(target=xmlrpc_server.serve_forever)
-    rpc_thread.daemon = True
-    rpc_thread.start()
-
-    exit_code = qapp_exec(app)
-
-    ipc_server.stop()
-    if xmlrpc_server:
-        try:
-            xmlrpc_server.shutdown()
-        except Exception:
-            pass
-
-    sys.exit(exit_code)
-
-
-def _setup_xmlrpc_methods(server, bridge):
-    """Registers legacy XML-RPC endpoints for backward-compatibility with older rule callers."""
-    def _do_clear():
-        bridge.clear_hud_requested.emit()
-        return 0
-
-    def _do_hide_hud():
-        bridge.hide_hud_requested.emit()
-        return 0
-
-    def _do_show_hud():
-        bridge.show_hud_requested.emit()
-        return 0
-
-    def _do_hide_rules():
-        bridge.hide_rules_requested.emit()
-        return 0
-
-    def _do_send(text):
-        bridge.event_dispatched.emit(RecognitionEvent(phrase=str(text)))
-        return len(text)
-
-    def _do_set_theme(theme):
-        bridge.set_theme_requested.emit(str(theme))
-        return 0
-
-    def _do_cycle_theme():
-        bridge.cycle_theme_requested.emit()
-        return 0
-
-    def _do_toggle_border():
-        bridge.toggle_border_requested.emit()
-        return 0
-
-    def _do_toggle_drag():
-        bridge.toggle_drag_requested.emit()
-        return 0
-
-    def _do_toggle_scrollbars():
-        bridge.toggle_scrollbars_requested.emit()
-        return 0
-
-    def _do_toggle_status_bar():
-        bridge.toggle_status_bar_requested.emit()
-        return 0
-
-    def _do_toggle_rules_bar():
-        bridge.toggle_rules_bar_requested.emit()
-        return 0
-
-    def _do_toggle_adce():
-        bridge.toggle_adce_requested.emit()
-        return 0
-
-    def _do_toggle_verbose():
-        bridge.toggle_verbose_requested.emit()
-        return 0
-
-    def _do_font_increase():
-        bridge.font_increase_requested.emit()
-        return 0
-
-    def _do_font_decrease():
-        bridge.font_decrease_requested.emit()
-        return 0
-
-    def _do_font_reset():
-        bridge.font_reset_requested.emit()
-        return 0
-
-    def _do_save_profile(name="default"):
-        bridge.save_profile_requested.emit(str(name))
-        return 0
-
-    def _do_load_profile(name="default"):
-        bridge.load_profile_requested.emit(str(name))
-        return 0
-
-    def _do_show_profile_dialog(mode="save"):
-        bridge.show_profile_dialog_requested.emit(str(mode))
-        return 0
-
-    def _do_show_theme_dialog():
-        bridge.show_theme_dialog_requested.emit()
-        return 0
-
-    def _do_set_opacity(opacity=1.0):
-        bridge.set_opacity_requested.emit(float(opacity))
-        return 0
-
-    def _do_set_background_opacity(opacity=1.0):
-        bridge.set_background_opacity_requested.emit(float(opacity))
-        return 0
-
-    def _do_set_text_opacity(opacity=1.0):
-        bridge.set_text_opacity_requested.emit(float(opacity))
-        return 0
-
-    def _do_set_text_alignment(alignment="left"):
-        bridge.set_text_alignment_requested.emit(str(alignment))
-        return 0
-
-    def _do_show_help():
-        bridge.show_help_requested.emit()
-        return 0
-
-    def _do_hide_help():
-        bridge.hide_help_requested.emit()
-        return 0
-
-    def _do_show_rules(json_str=""):
-        bridge.show_rules_requested.emit(str(json_str))
-        return len(json_str)
-
-    def _do_kill():
-        QtWidgets.QApplication.quit()
-        return 0
-
-    def _do_set_mic_mode(mode="on"):
-        from castervoice.asynch.hud.core.events import MicStateEvent
-        bridge.event_dispatched.emit(MicStateEvent(mode=str(mode)))
-        return 0
-
-    server.register_function(_do_set_mic_mode, "set_mic_mode")
-    server.register_function(_do_set_mic_mode, "set_mic_state")
-    server.register_function(_do_set_mic_mode, "set_mode")
-    server.register_function(_do_clear, "clear_hud")
-    server.register_function(lambda: 0, "ping")
-    server.register_function(_do_hide_hud, "hide_hud")
-    server.register_function(_do_show_hud, "show_hud")
-    server.register_function(_do_hide_rules, "hide_rules")
-    server.register_function(_do_send, "send")
-    server.register_function(_do_set_theme, "set_theme")
-    server.register_function(_do_cycle_theme, "cycle_theme")
-    server.register_function(_do_toggle_border, "toggle_border")
-    server.register_function(_do_toggle_drag, "toggle_drag")
-    server.register_function(_do_toggle_scrollbars, "toggle_scrollbars")
-    server.register_function(_do_toggle_status_bar, "toggle_status_bar")
-    server.register_function(_do_toggle_rules_bar, "toggle_rules_bar")
-    server.register_function(_do_toggle_adce, "toggle_adce")
-    server.register_function(_do_toggle_verbose, "toggle_verbose")
-    server.register_function(_do_font_increase, "font_increase")
-    server.register_function(_do_font_decrease, "font_decrease")
-    server.register_function(_do_font_reset, "font_reset")
-    server.register_function(_do_save_profile, "save_profile")
-    server.register_function(_do_load_profile, "load_profile")
-    server.register_function(_do_show_profile_dialog, "show_profile_dialog")
-    server.register_function(_do_show_theme_dialog, "show_theme_dialog")
-    server.register_function(_do_show_theme_dialog, "show_customizer")
-    server.register_function(_do_set_opacity, "set_opacity")
-    server.register_function(_do_set_background_opacity, "set_background_opacity")
-    server.register_function(_do_set_text_opacity, "set_text_opacity")
-    server.register_function(_do_set_text_opacity, "set_letter_opacity")
-    server.register_function(_do_set_text_alignment, "set_text_alignment")
-    server.register_function(_do_set_text_alignment, "set_alignment")
-    server.register_function(_do_show_help, "show_help")
-    server.register_function(_do_hide_help, "hide_help")
-    server.register_function(_do_show_rules, "show_rules")
-    server.register_function(_do_kill, "kill")
-
-
 if __name__ == "__main__":
-    main()
+    signal.signal(signal.SIGINT, handler)
+    server_address = (Communicator.LOCALHOST, Communicator().com_registry["hud"])
+    # allow_none=True means Python constant None will be translated into XML
+    server = SimpleXMLRPCServer(server_address, logRequests=False, allow_none=True)
+    app = QApplication(sys.argv)
+    window = HUDWindow(server)
+    window.show()
+    exit_code = qapp_exec(app)
+    server.shutdown()
+    sys.exit(exit_code)

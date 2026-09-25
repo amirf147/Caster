@@ -15,7 +15,7 @@ class PluginBase(object):
     """
 
     name = "base_plugin"
-    version = "1.0.0"
+    version = "0.1.0"
     description = "Base Caster Plugin"
 
     def __init__(self):

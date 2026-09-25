@@ -31,6 +31,26 @@ DEFAULT_REGISTRY_URL = (
 )
 
 
+def get_default_registry():
+    """Resolves registry source with local repo priority and fallback to remote URL."""
+    if os.getenv("CASTER_PLUGIN_REGISTRY"):
+        return os.getenv("CASTER_PLUGIN_REGISTRY")
+    try:
+        doc = load_settings_toml()
+        cfg = doc.get("plugins_config", {})
+        local_p = cfg.get("local_registry_path")
+        if local_p and os.path.exists(local_p):
+            return str(local_p)
+        if cfg.get("registry_url"):
+            return str(cfg.get("registry_url"))
+    except Exception:
+        pass
+    default_local = Path.home() / "Documents" / "repos" / "caster-plugins" / "manifest.json"
+    if default_local.is_file():
+        return str(default_local)
+    return DEFAULT_REGISTRY_URL
+
+
 def get_user_dir():
     """Returns the authoritative Caster user directory."""
     if os.getenv("CASTER_USER_DIR"):
@@ -232,8 +252,8 @@ def main():
     parser = argparse.ArgumentParser(description="Caster Plugin Manager CLI")
     parser.add_argument(
         "--registry",
-        default=DEFAULT_REGISTRY_URL,
-        help="URL to plugin registry manifest JSON",
+        default=None,
+        help="URL or local path to plugin registry manifest JSON (defaults to settings/local repo)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -256,6 +276,9 @@ def main():
     )
 
     args = parser.parse_args()
+    if not getattr(args, "registry", None):
+        args.registry = get_default_registry()
+
     if args.command == "list":
         cmd_list(args)
     elif args.command == "install":
