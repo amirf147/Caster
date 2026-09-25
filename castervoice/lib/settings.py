@@ -367,6 +367,9 @@ def _get_defaults():
             "default_hooks": ['PrinterHook', 'RulesLoadedHook'],
         },
 
+        # Plugin activation settings
+        "plugins": {},
+
         # miscellaneous section
         "miscellaneous": {
             "dev_commands": True,

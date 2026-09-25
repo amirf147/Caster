@@ -1,4 +1,4 @@
-from dragonfly import MappingRule, Function, RunCommand
+from dragonfly import Choice, Function, MappingRule, RunCommand
 
 from castervoice.lib import control, utilities
 from castervoice.lib.ctrl.dependencies import find_pip  # pylint: disable=no-name-in-module
@@ -15,6 +15,7 @@ from castervoice.asynch.hud_support import (
     hide_rules,
     clear_hud,
 )
+from castervoice.lib.ctrl.mgr import plugin_support
 
 _PIP = find_pip()
 
@@ -64,7 +65,22 @@ class CasterRule(MappingRule):
             R(Function(show_rules), rdescript="Open HUD frame with the list of active rules"),
         "(hide caster rules | caster hide rules)":
             R(Function(hide_rules), rdescript="Hide the list of active rules"),
+
+        # Plugin management commands
+        "caster (list | show) plugins":
+            R(Function(plugin_support.list_plugins), rdescript="List installed and running plugins"),
+        "caster reload plugins":
+            R(Function(plugin_support.reload_plugins), rdescript="Reload all enabled plugins"),
+        "caster (load | start) plugin <plugin_name>":
+            R(Function(plugin_support.load_plugin), rdescript="Load and start a plugin dynamically"),
+        "caster (unload | stop) plugin <plugin_name>":
+            R(Function(plugin_support.unload_plugin), rdescript="Stop and unload a plugin dynamically"),
+        "caster install plugin <plugin_name>":
+            R(Function(plugin_support.install_plugin), rdescript="Install and start a plugin from registry"),
     }
+    extras = [
+        Choice("plugin_name", plugin_support.get_plugin_choices()),
+    ]
 
 
 def get_rule():
