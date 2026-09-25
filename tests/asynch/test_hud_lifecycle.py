@@ -100,3 +100,40 @@ class TestHudLifecycle(TestCase):
         hud_support.show_hud()
 
         mock_start.assert_called_once()
+
+    def test_process_strategy_factory_selection(self):
+        from castervoice.asynch.process_lifecycle import (
+            get_process_strategy,
+            WindowsProcessStrategy,
+            LinuxProcessStrategy,
+            DarwinProcessStrategy,
+            BaseProcessStrategy,
+        )
+
+        with patch("sys.platform", "win32"):
+            strat = get_process_strategy()
+            self.assertIsInstance(strat, WindowsProcessStrategy)
+
+        with patch("sys.platform", "linux"):
+            strat = get_process_strategy()
+            self.assertIsInstance(strat, LinuxProcessStrategy)
+
+        with patch("sys.platform", "darwin"):
+            strat = get_process_strategy()
+            self.assertIsInstance(strat, DarwinProcessStrategy)
+
+        with patch("sys.platform", "unknown_os"):
+            strat = get_process_strategy()
+            self.assertIsInstance(strat, BaseProcessStrategy)
+
+    def test_linux_strategy_get_popen_kwargs(self):
+        from castervoice.asynch.process_lifecycle import LinuxProcessStrategy
+        strat = LinuxProcessStrategy()
+        kwargs = strat.get_popen_kwargs()
+        self.assertTrue("preexec_fn" in kwargs or "start_new_session" in kwargs)
+
+    def test_darwin_strategy_get_popen_kwargs(self):
+        from castervoice.asynch.process_lifecycle import DarwinProcessStrategy
+        strat = DarwinProcessStrategy()
+        kwargs = strat.get_popen_kwargs()
+        self.assertTrue(kwargs.get("start_new_session"))

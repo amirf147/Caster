@@ -19,10 +19,12 @@ from castervoice.lib import printer, control, utilities
 from castervoice.lib.rules_collection import get_instance
 
 
+from castervoice.asynch.process_lifecycle import get_process_strategy
+
 _HUD_PROCESS = None
-_HUD_JOB_OBJECT = None
 _CURRENT_HUD_PATH = None
 _IS_STARTING = False
+_PROCESS_STRATEGY = get_process_strategy()
 
 
 def _wait_for_port_release(port=8338, timeout=2.0):
@@ -37,83 +39,11 @@ def _wait_for_port_release(port=8338, timeout=2.0):
     return False
 
 
-def _get_or_create_hud_job():
-    global _HUD_JOB_OBJECT
-    if sys.platform != "win32":
-        return None
-    if _HUD_JOB_OBJECT is not None:
-        return _HUD_JOB_OBJECT
-    try:
-        import ctypes
-        from ctypes import wintypes
-        kernel32 = ctypes.windll.kernel32
-        job = kernel32.CreateJobObjectW(None, None)
-        if not job:
-            return None
-
-        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
-            _fields_ = [
-                ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
-                ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
-                ("LimitFlags", wintypes.DWORD),
-                ("MinimumWorkingSetSize", ctypes.c_size_t),
-                ("MaximumWorkingSetSize", ctypes.c_size_t),
-                ("ActiveProcessLimit", wintypes.DWORD),
-                ("Affinity", ctypes.c_size_t),
-                ("PriorityClass", wintypes.DWORD),
-                ("SchedulingClass", wintypes.DWORD),
-            ]
-
-        class IO_COUNTERS(ctypes.Structure):
-            _fields_ = [(f, ctypes.c_uint64) for f in [
-                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
-                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount"
-            ]]
-
-        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-            _fields_ = [
-                ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
-                ("IoInfo", IO_COUNTERS),
-                ("ProcessMemoryLimit", ctypes.c_size_t),
-                ("JobMemoryLimit", ctypes.c_size_t),
-                ("PeakProcessMemoryLimit", ctypes.c_size_t),
-                ("PeakJobMemoryLimit", ctypes.c_size_t),
-            ]
-
-        info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-
-        JobObjectExtendedLimitInformation = 9
-        res = kernel32.SetInformationJobObject(
-            job, JobObjectExtendedLimitInformation,
-            ctypes.byref(info), ctypes.sizeof(info)
-        )
-        if not res:
-            kernel32.CloseHandle(job)
-            return None
-        _HUD_JOB_OBJECT = job
-        return _HUD_JOB_OBJECT
-    except Exception:
-        return None
-
-
-def _bind_process_to_job(proc):
-    if sys.platform != "win32" or proc is None:
-        return
-    try:
-        job = _get_or_create_hud_job()
-        if job and hasattr(proc, "_handle") and proc._handle:
-            import ctypes
-            ctypes.windll.kernel32.AssignProcessToJobObject(job, int(proc._handle))
-    except Exception:
-        pass
-
-
 def start_hud(hud_path=None):
     """
     Starts the external HUD process.
     If hud_path is None, launches the default standard HUD configured in settings.
-    Binds the child process to a Windows Job Object to guarantee lifecycle containment.
+    Binds the child process using cross-platform OS lifecycle strategies.
     """
     global _HUD_PROCESS, _CURRENT_HUD_PATH, _IS_STARTING
     if hud_path is None:
@@ -148,8 +78,9 @@ def start_hud(hud_path=None):
         except Exception:
             pythonw = sys.executable
 
-        _HUD_PROCESS = subprocess.Popen([pythonw, hud_path])
-        _bind_process_to_job(_HUD_PROCESS)
+        popen_kwargs = _PROCESS_STRATEGY.get_popen_kwargs()
+        _HUD_PROCESS = subprocess.Popen([pythonw, hud_path], **popen_kwargs)
+        _PROCESS_STRATEGY.bind_process(_HUD_PROCESS)
     finally:
         _IS_STARTING = False
 
@@ -166,10 +97,7 @@ def stop_hud():
         try:
             _HUD_PROCESS.wait(timeout=1.5)
         except Exception:
-            try:
-                _HUD_PROCESS.kill()
-            except Exception:
-                pass
+            _PROCESS_STRATEGY.terminate_process(_HUD_PROCESS)
         _HUD_PROCESS = None
     _wait_for_port_release(8338, timeout=1.0)
 
