@@ -41,12 +41,7 @@ def get_configured_registry_source():
     except Exception:
         pass
 
-    # 3. Automatic detection of local repo if present
-    default_local = Path.home() / "Documents" / "repos" / "caster-plugins" / "manifest.json"
-    if default_local.is_file():
-        return str(default_local)
-
-    # 4. Default remote repository URL
+    # 3. Default remote repository URL
     return DEFAULT_REGISTRY_URL
 
 
@@ -165,25 +160,82 @@ def install_plugin(plugin_name):
 
 
 def get_plugin_choices():
-    """Generates phonetic and literal choices for plugin voice commands."""
-    choices = {
-        "taskbar hud": "taskbar_hud",
-        "taskbar": "taskbar_hud",
-        "themed hud": "themed_hud",
-        "themes hud": "themed_hud",
-        "adce": "adce",
-        "a d c e": "adce",
-        "context engine": "adce",
-    }
+    """
+    Generates phonetic and literal choices for plugin voice commands dynamically.
+    Discovers available plugins and aliases from active plugins, plugin directories,
+    and user configuration without hardcoded names.
+    """
+    choices = {}
+
+    def _add_choice(raw_name, target):
+        if not raw_name or not target:
+            return
+        clean_spoken = str(raw_name).strip().lower()
+        if clean_spoken:
+            choices[clean_spoken] = str(target)
+
+    # 1. Inspect loaded plugins in PluginManager
     try:
-        u_dir = get_user_plugins_dir()
-        if u_dir.is_dir():
-            for p in u_dir.iterdir():
-                if p.is_dir() and not p.name.startswith((".", "_")):
-                    name = p.name
-                    spoken = name.replace("_", " ")
-                    choices[spoken] = name
-                    choices[name] = name
+        pm = get_plugin_manager()
+        for p in pm.get_loaded_plugins():
+            p_name = getattr(p, "name", None)
+            if p_name:
+                _add_choice(p_name, p_name)
+                _add_choice(p_name.replace("_", " "), p_name)
+                _add_choice(p_name.replace("-", " "), p_name)
+                for alias in getattr(p, "aliases", []):
+                    _add_choice(alias, p_name)
     except Exception:
         pass
+
+    # 2. Inspect built-in and user plugin directories
+    search_dirs = []
+    try:
+        b_dir = get_builtin_plugins_dir()
+        if b_dir and b_dir.is_dir():
+            search_dirs.append(b_dir)
+    except Exception:
+        pass
+    try:
+        u_dir = get_user_plugins_dir()
+        if u_dir and u_dir.is_dir():
+            search_dirs.append(u_dir)
+    except Exception:
+        pass
+
+    for p_dir in search_dirs:
+        try:
+            for entry in p_dir.iterdir():
+                if entry.name.startswith((".", "_")):
+                    continue
+                if entry.is_dir() or entry.suffix == ".py":
+                    name = entry.stem if entry.is_file() else entry.name
+                    _add_choice(name, name)
+                    _add_choice(name.replace("_", " "), name)
+                    _add_choice(name.replace("-", " "), name)
+        except Exception:
+            pass
+
+    # 3. Inspect settings.toml for configured plugins and custom user aliases
+    try:
+        doc = load_settings_toml()
+        plugins_cfg = doc.get("plugins", {})
+        for name, val in plugins_cfg.items():
+            if name.startswith((".", "_")):
+                continue
+            _add_choice(name, name)
+            _add_choice(name.replace("_", " "), name)
+            _add_choice(name.replace("-", " "), name)
+            if isinstance(val, dict):
+                aliases = val.get("aliases", [])
+                if isinstance(aliases, (list, tuple)):
+                    for alias in aliases:
+                        _add_choice(alias, name)
+    except Exception:
+        pass
+
+    # 4. Fallback to prevent Dragonfly Choice initialization failure if no plugins exist
+    if not choices:
+        choices["plugin"] = "plugin"
+
     return choices

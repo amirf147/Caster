@@ -3,7 +3,8 @@ Unit tests for Caster PluginManager and PluginBase lifecycle contract.
 """
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from pathlib import Path
 
 from castervoice.lib.plugin import PluginBase
 from castervoice.lib.ctrl.mgr.plugin_manager import PluginManager
@@ -169,6 +170,58 @@ class TestPluginManager(unittest.TestCase):
             success, msg = self.manager.unload_plugin("custom_hud")
             self.assertTrue(success)
             mock_start.assert_not_called()
+
+    def test_get_plugin_choices_dynamic_and_fallback(self):
+        """Verifies get_plugin_choices is dynamic, agnostic, and provides safe fallbacks."""
+        from castervoice.lib.ctrl.mgr import plugin_support
+
+        # 1. When empty, returns safe fallback
+        with patch.object(plugin_support, "get_plugin_manager") as mock_get_pm, \
+             patch.object(plugin_support, "get_builtin_plugins_dir") as mock_b_dir, \
+             patch.object(plugin_support, "get_user_plugins_dir") as mock_u_dir, \
+             patch.object(plugin_support, "load_settings_toml", return_value={}):
+
+            mock_pm = MagicMock()
+            mock_pm.get_loaded_plugins.return_value = []
+            mock_get_pm.return_value = mock_pm
+
+            mock_b_dir.return_value = Path("/nonexistent/builtin")
+            mock_u_dir.return_value = Path("/nonexistent/user")
+
+            choices = plugin_support.get_plugin_choices()
+            self.assertEqual(choices, {"plugin": "plugin"})
+
+        # 2. When loaded plugins have aliases, derives choices dynamically
+        with patch.object(plugin_support, "get_plugin_manager") as mock_get_pm, \
+             patch.object(plugin_support, "get_builtin_plugins_dir") as mock_b_dir, \
+             patch.object(plugin_support, "get_user_plugins_dir") as mock_u_dir, \
+             patch.object(plugin_support, "load_settings_toml") as mock_load_cfg:
+
+            class MyCustomPlugin(PluginBase):
+                name = "my_custom_plugin"
+                aliases = ["custom plug", "my tool"]
+
+            mock_pm = MagicMock()
+            mock_pm.get_loaded_plugins.return_value = [MyCustomPlugin()]
+            mock_get_pm.return_value = mock_pm
+            mock_b_dir.return_value = Path("/nonexistent/builtin")
+            mock_u_dir.return_value = Path("/nonexistent/user")
+            mock_load_cfg.return_value = {
+                "plugins": {
+                    "configured_plugin": {"aliases": ["voice alias"]}
+                }
+            }
+
+            choices = plugin_support.get_plugin_choices()
+            self.assertEqual(choices.get("my_custom_plugin"), "my_custom_plugin")
+            self.assertEqual(choices.get("my custom plugin"), "my_custom_plugin")
+            self.assertEqual(choices.get("custom plug"), "my_custom_plugin")
+            self.assertEqual(choices.get("my tool"), "my_custom_plugin")
+            self.assertEqual(choices.get("configured_plugin"), "configured_plugin")
+            self.assertEqual(choices.get("voice alias"), "configured_plugin")
+            # Verify no hardcoded names are present
+            self.assertNotIn("taskbar_hud", choices)
+            self.assertNotIn("adce", choices)
 
 
 if __name__ == "__main__":
