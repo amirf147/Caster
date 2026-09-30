@@ -28,6 +28,16 @@ class PluginManager(object):
         self._plugins = {}  # name -> PluginBase instance
         self._enabled_names = set()
 
+    def set_nexus(self, nexus):
+        """Updates the nexus reference if previously unset or reinitialized."""
+        if nexus is not None:
+            self._nexus = nexus
+
+    def set_settings(self, settings_dict):
+        """Updates the settings dictionary if previously unset or reloaded."""
+        if settings_dict is not None:
+            self._settings = settings_dict
+
     def get_plugin(self, name):
         """Returns the loaded plugin instance by name, or None if not loaded."""
         return self._plugins.get(name)
@@ -41,6 +51,21 @@ class PluginManager(object):
         Discovers and instantiates enabled plugins from specified directories.
         Defaults to scanning castervoice/plugins/ and caster_user_content/plugins/.
         """
+        if self._nexus is None:
+            try:
+                from castervoice.lib import control
+                self._nexus = control.nexus()
+            except Exception:
+                pass
+
+        if not self._settings:
+            try:
+                from castervoice.lib import settings
+                if settings.SETTINGS:
+                    self._settings = settings.SETTINGS
+            except Exception:
+                pass
+
         plugins_config = self._settings.get("plugins", {})
 
         # Determine which plugins are enabled in settings
@@ -208,11 +233,12 @@ class PluginManager(object):
                 try:
                     rules = plugin_instance.get_rules() if hasattr(plugin_instance, "get_rules") else []
                     if rules:
+                        from castervoice.lib.ctrl.mgr.rule_details import RuleDetails
                         for rule_item in rules:
                             if inspect.isclass(rule_item):
-                                self._nexus._grammar_manager.add_rule(rule_item)
+                                self._nexus._grammar_manager.register_rule(rule_item, RuleDetails(name=rule_item.__name__))
                             elif isinstance(rule_item, tuple) and len(rule_item) >= 2:
-                                self._nexus._grammar_manager.add_rule(rule_item[0], rule_item[1])
+                                self._nexus._grammar_manager.register_rule(rule_item[0], rule_item[1])
                 except Exception as r_err:
                     _logger.warning("Failed to register rules for plugin '%s': %s", plugin_name, r_err)
 
@@ -329,4 +355,9 @@ def get_plugin_manager(nexus=None, settings_dict=None):
     global _GLOBAL_PLUGIN_MANAGER
     if _GLOBAL_PLUGIN_MANAGER is None:
         _GLOBAL_PLUGIN_MANAGER = PluginManager(nexus=nexus, settings_dict=settings_dict)
+    else:
+        if nexus is not None:
+            _GLOBAL_PLUGIN_MANAGER.set_nexus(nexus)
+        if settings_dict is not None:
+            _GLOBAL_PLUGIN_MANAGER.set_settings(settings_dict)
     return _GLOBAL_PLUGIN_MANAGER

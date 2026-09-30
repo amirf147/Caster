@@ -59,7 +59,7 @@ class EngineConfigLate:
 
         if self.engine != 'natlink':
             # Other engines besides natlink needs a default mic state for sleep_timer
-            self._engine_modes_manager.mic_state = "on"
+            self._engine_modes_manager.set_mic_mode("on")
         if self.engine != "text":
             self._engine_timers()
             self._set_default_mic_mode()
