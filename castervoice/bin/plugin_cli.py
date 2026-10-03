@@ -5,13 +5,13 @@ Enables listing, installation, updating, enabling, disabling, and removal
 of Caster plugins from user space and remote plugin registries.
 
 Usage:
-    py -3.10 -m castervoice.bin.plugin_cli list
-    py -3.10 -m castervoice.bin.plugin_cli install <name>
-    py -3.10 -m castervoice.bin.plugin_cli update [name|all]
-    py -3.10 -m castervoice.bin.plugin_cli enable <name>
-    py -3.10 -m castervoice.bin.plugin_cli disable <name>
-    py -3.10 -m castervoice.bin.plugin_cli remove <name> [--purge]
-    py -3.10 -m castervoice.bin.plugin_cli info <name>
+    py -m castervoice.bin.plugin_cli list
+    py -m castervoice.bin.plugin_cli install <name>
+    py -m castervoice.bin.plugin_cli update [name|all]
+    py -m castervoice.bin.plugin_cli enable <name>
+    py -m castervoice.bin.plugin_cli disable <name>
+    py -m castervoice.bin.plugin_cli remove <name> [--purge]
+    py -m castervoice.bin.plugin_cli info <name>
 """
 
 import argparse
