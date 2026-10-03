@@ -46,7 +46,7 @@ if control.nexus() is None:
         _plugin_manager = get_plugin_manager(nexus=control.nexus(), settings_dict=settings.SETTINGS)
         _plugin_manager.load_plugins()
 
-    if get_current_engine().name != "text" and settings.SETTINGS.get("hud", {}).get("enabled", True):
+    if get_current_engine().name != "text":
         from castervoice.asynch import hud_support
         dh = printer.get_delegating_handler()
         if not dh.has_handler(hud_support.HudPrintMessageHandler):
@@ -54,7 +54,7 @@ if control.nexus() is None:
         replaces_hud = False
         if _plugin_manager:
             replaces_hud = any(getattr(p, "replaces_hud", False) for p in _plugin_manager.get_loaded_plugins())
-        if not replaces_hud:
+        if not replaces_hud and settings.SETTINGS.get("hud", {}).get("enabled", True):
             hud_support.start_hud()
 
     EngineConfigLate() # Requires grammars to be loaded and nexus
