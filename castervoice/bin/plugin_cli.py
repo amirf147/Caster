@@ -1,124 +1,44 @@
 """
 Caster Plugin Management CLI
 
-Enables listing, installation, updating, and removal of Caster plugins
-from local user space and remote plugin registries.
+Enables listing, installation, updating, enabling, disabling, and removal
+of Caster plugins from user space and remote plugin registries.
 
 Usage:
     py -3.10 -m castervoice.bin.plugin_cli list
     py -3.10 -m castervoice.bin.plugin_cli install <name>
-    py -3.10 -m castervoice.bin.plugin_cli remove <name>
+    py -3.10 -m castervoice.bin.plugin_cli update [name|all]
+    py -3.10 -m castervoice.bin.plugin_cli enable <name>
+    py -3.10 -m castervoice.bin.plugin_cli disable <name>
+    py -3.10 -m castervoice.bin.plugin_cli remove <name> [--purge]
+    py -3.10 -m castervoice.bin.plugin_cli info <name>
 """
 
 import argparse
-import io
-import json
-import os
+import platform
 import shutil
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-import tomlkit
-from appdirs import user_data_dir
-
-DEFAULT_REGISTRY_URL = (
-    "https://raw.githubusercontent.com/amirf147/caster-plugins/master/manifest.json"
+from castervoice.lib.ctrl.mgr.plugin_support import (
+    DEFAULT_REGISTRY_URL,
+    fetch_registry,
+    get_builtin_plugins_dir,
+    get_configured_registry_source,
+    get_user_plugins_dir,
+    install_plugin_package,
+    load_settings_toml,
+    set_plugin_enabled,
 )
 
 
-def get_default_registry():
-    """Resolves registry source with local repo priority and fallback to remote URL."""
-    if os.getenv("CASTER_PLUGIN_REGISTRY"):
-        return os.getenv("CASTER_PLUGIN_REGISTRY")
-    try:
-        doc = load_settings_toml()
-        cfg = doc.get("plugins_config", {})
-        local_p = cfg.get("local_registry_path")
-        if local_p and os.path.exists(local_p):
-            return str(local_p)
-        if cfg.get("registry_url"):
-            return str(cfg.get("registry_url"))
-    except Exception:
-        pass
-    return DEFAULT_REGISTRY_URL
-
-
-def get_user_dir():
-    """Returns the authoritative Caster user directory."""
-    if os.getenv("CASTER_USER_DIR"):
-        return Path(os.getenv("CASTER_USER_DIR"))
-    return Path(user_data_dir(appname="caster", appauthor=False))
-
-
-def get_user_plugins_dir():
-    """Returns the user plugins directory."""
-    plugins_dir = get_user_dir() / "caster_user_content" / "plugins"
-    plugins_dir.mkdir(parents=True, exist_ok=True)
-    return plugins_dir
-
-
-def get_builtin_plugins_dir():
-    """Returns the in-tree Caster core plugins directory."""
-    base_dir = Path(__file__).resolve().parent.parent
-    return base_dir / "plugins"
-
-
-def get_settings_path():
-    """Returns the path to settings.toml in user space."""
-    return get_user_dir() / "settings" / "settings.toml"
-
-
-def load_settings_toml():
-    """Loads settings.toml as a tomlkit document."""
-    path = get_settings_path()
-    if path.is_file():
-        with io.open(str(path), "rt", encoding="utf-8") as f:
-            return tomlkit.loads(f.read())
-    return tomlkit.document()
-
-
-def save_settings_toml(doc):
-    """Saves tomlkit document to settings.toml."""
-    path = get_settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with io.open(str(path), "w", encoding="utf-8") as f:
-        f.write(tomlkit.dumps(doc))
-
-
-def set_plugin_enabled(plugin_name, enabled=True):
-    """Updates the [plugins] table in settings.toml."""
-    doc = load_settings_toml()
-    if "plugins" not in doc:
-        doc["plugins"] = tomlkit.table()
-    doc["plugins"][plugin_name] = enabled
-    save_settings_toml(doc)
-
-
-def fetch_registry(registry_url=DEFAULT_REGISTRY_URL):
-    """Fetches and parses the plugin manifest JSON from a local path or remote URL."""
-    try:
-        p = Path(registry_url)
-        if p.is_file():
-            with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
-        if p.is_dir() and (p / "manifest.json").is_file():
-            with open(p / "manifest.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-
-        req = urllib.request.Request(
-            registry_url, headers={"User-Agent": "Caster-Plugin-CLI/1.0"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = resp.read().decode("utf-8")
-            return json.loads(data)
-    except Exception:
-        return None
+def _get_current_platform():
+    """Returns normalized platform identifier: 'windows', 'linux', or 'darwin'."""
+    return platform.system().lower()
 
 
 def cmd_list(args):
-    """Lists installed and available plugins."""
+    """Lists installed and available plugins across local space and remote registry."""
     doc = load_settings_toml()
     plugins_cfg = doc.get("plugins", {})
 
@@ -143,21 +63,23 @@ def cmd_list(args):
                 installed[name] = {"scope": "user-space", "path": str(entry)}
 
     print("\nInstalled Caster Plugins:")
-    print("-" * 65)
-    print(f"{'Plugin Name':<20} {'Scope':<15} {'Status':<12} {'Path'}")
-    print("-" * 65)
+    print("-" * 75)
+    print(f"{'Plugin Name':<22} {'Scope':<15} {'Status':<12} {'Path'}")
+    print("-" * 75)
     if not installed:
         print("  (No plugins found)")
     else:
         for name, info in sorted(installed.items()):
-            is_enabled = bool(plugins_cfg.get(name, False))
+            val = plugins_cfg.get(name, False)
+            is_enabled = bool(val.get("enabled", False)) if isinstance(val, dict) else bool(val)
             status = "enabled" if is_enabled else "disabled"
-            print(f"{name:<20} {info['scope']:<15} {status:<12} {info['path']}")
+            print(f"{name:<22} {info['scope']:<15} {status:<12} {info['path']}")
 
-    # Check registry
-    print("\nRemote / Local Registry Availability:")
-    print("-" * 65)
+    # Registry check
+    print("\nAvailable in Plugin Registry:")
+    print("-" * 75)
     registry = fetch_registry(args.registry)
+    current_os = _get_current_platform()
     if not registry or "plugins" not in registry:
         print(f"  (Registry at '{args.registry}' unreachable or empty)")
     else:
@@ -165,81 +87,182 @@ def cmd_list(args):
             inst_status = "installed" if name in installed else "available"
             version = details.get("version", "unknown")
             desc = details.get("description", "")
-            print(f"  * {name:<16} v{version:<6} [{inst_status:<9}] {desc}")
+            supported_platforms = details.get("platforms", ["any"])
+            if isinstance(supported_platforms, str):
+                supported_platforms = [supported_platforms]
+
+            plat_note = ""
+            if "any" not in supported_platforms and current_os not in supported_platforms:
+                plat_note = f" (requires {','.join(supported_platforms)})"
+
+            print(f"  * {name:<18} v{version:<6} [{inst_status:<9}] {desc}{plat_note}")
     print()
 
 
 def cmd_install(args):
     """Installs a plugin into user space and enables it."""
     plugin_name = args.name.strip()
-    target_dir = get_user_plugins_dir() / plugin_name
+    registry_source = args.registry
+    source_path = getattr(args, "source", None)
+    force = getattr(args, "force", False)
 
-    if target_dir.exists() and not getattr(args, "force", False):
-        print(f"Plugin '{plugin_name}' is already installed at {target_dir}.")
-        set_plugin_enabled(plugin_name, True)
-        print(f"Ensured '{plugin_name}' is set to true in settings.toml. (Use --force to overwrite files)")
-        return
-
-    # 1. Direct local source path override
-    source_dir = None
-    if getattr(args, "source", None):
-        cand = Path(args.source)
-        if cand.exists():
-            source_dir = cand
-
-    # 2. Check registry
-    registry = fetch_registry(args.registry)
-    if not source_dir:
-        if not registry or "plugins" not in registry or plugin_name not in registry["plugins"]:
-            print(f"Error: Plugin '{plugin_name}' not found in registry {args.registry}.")
-            sys.exit(1)
-
+    # Optional platform warning check
+    registry = fetch_registry(registry_source)
+    if registry and "plugins" in registry and plugin_name in registry["plugins"]:
         details = registry["plugins"][plugin_name]
-        subpath = details.get("path", f"plugins/{plugin_name}")
+        platforms = details.get("platforms", ["any"])
+        if isinstance(platforms, str):
+            platforms = [platforms]
+        current_os = _get_current_platform()
+        if "any" not in platforms and current_os not in platforms:
+            print(f"Warning: Plugin '{plugin_name}' specifies support for {platforms}, but current platform is {current_os}.")
 
-        # Check if registry is local file or dir
-        reg_p = Path(args.registry)
-        reg_base = reg_p.parent if reg_p.is_file() else reg_p
-        if (reg_base / subpath).exists():
-            source_dir = reg_base / subpath
-
-    if source_dir and source_dir.exists():
-        print(f"Installing '{plugin_name}' from local source: {source_dir}...")
-        if source_dir.is_dir():
-            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
-        else:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_dir, target_dir)
+    success, msg = install_plugin_package(
+        plugin_name,
+        registry_url=registry_source,
+        source_path=source_path,
+        force=force,
+    )
+    if success:
+        print(f"Success: {msg}")
     else:
-        repo_base = registry.get("repository", "https://github.com/amirf147/caster-plugins") if registry else ""
-        subpath = registry["plugins"][plugin_name].get("path", f"plugins/{plugin_name}") if registry else ""
-        print(f"Installing '{plugin_name}' from {repo_base}/{subpath}...")
-        target_dir.mkdir(parents=True, exist_ok=True)
-        init_file = target_dir / "__init__.py"
-        if not init_file.exists():
-            with open(init_file, "w", encoding="utf-8") as f:
-                f.write(f'"""Plugin {plugin_name}"""\n')
+        print(f"Error: {msg}")
+        sys.exit(1)
 
+
+def cmd_update(args):
+    """Updates installed plugins from local repository or remote registry while preserving settings."""
+    target_name = getattr(args, "name", None)
+    registry = fetch_registry(args.registry)
+    if not registry or "plugins" not in registry:
+        print(f"Error: Registry at '{args.registry}' unreachable or empty.")
+        sys.exit(1)
+
+    doc = load_settings_toml()
+    plugins_cfg = doc.get("plugins", {})
+
+    plugins_to_update = []
+    if target_name and target_name.lower() not in ("all", "--all"):
+        if target_name not in registry["plugins"]:
+            print(f"Error: Plugin '{target_name}' not found in registry {args.registry}.")
+            sys.exit(1)
+        plugins_to_update.append(target_name)
+    else:
+        user_dir = get_user_plugins_dir()
+        for p_name in registry["plugins"]:
+            if (user_dir / p_name).exists() or (user_dir / f"{p_name}.py").exists():
+                plugins_to_update.append(p_name)
+        if not plugins_to_update:
+            print("No user-space plugins currently installed to update.")
+            return
+
+    for plugin_name in plugins_to_update:
+        val = plugins_cfg.get(plugin_name, False)
+        was_enabled = bool(val.get("enabled", False)) if isinstance(val, dict) else bool(val)
+        print(f"\n--- Updating '{plugin_name}' (currently {'enabled' if was_enabled else 'disabled'}) ---")
+
+        success, msg = install_plugin_package(
+            plugin_name,
+            registry_url=args.registry,
+            source_path=getattr(args, "source", None),
+            force=True,
+        )
+        if success:
+            print(f"Success: {msg}")
+            if not was_enabled:
+                set_plugin_enabled(plugin_name, False)
+                print(f"Preserved '{plugin_name} = false' in settings.toml.")
+        else:
+            print(f"Error updating '{plugin_name}': {msg}")
+
+
+def cmd_enable(args):
+    """Enables an installed plugin in settings.toml."""
+    plugin_name = args.name.strip()
     set_plugin_enabled(plugin_name, True)
-    print(f"Plugin '{plugin_name}' installed and enabled successfully in settings.toml.")
+    print(f"Enabled plugin '{plugin_name}' in settings.toml.")
+
+
+def cmd_disable(args):
+    """Disables an installed plugin in settings.toml."""
+    plugin_name = args.name.strip()
+    set_plugin_enabled(plugin_name, False)
+    print(f"Disabled plugin '{plugin_name}' in settings.toml.")
 
 
 def cmd_remove(args):
     """Disables and removes a plugin from user space."""
     plugin_name = args.name.strip()
     target_dir = get_user_plugins_dir() / plugin_name
+    target_file = get_user_plugins_dir() / f"{plugin_name}.py"
 
     set_plugin_enabled(plugin_name, False)
     print(f"Disabled '{plugin_name}' in settings.toml.")
 
+    found = False
     if target_dir.exists():
+        found = True
         if args.purge:
             shutil.rmtree(target_dir, ignore_errors=True)
             print(f"Removed directory: {target_dir}")
         else:
             print(f"Retained directory: {target_dir} (use --purge to delete).")
-    else:
+
+    if target_file.exists():
+        found = True
+        if args.purge:
+            target_file.unlink(missing_ok=True)
+            print(f"Removed file: {target_file}")
+        else:
+            print(f"Retained file: {target_file} (use --purge to delete).")
+
+    if not found:
         print(f"Note: '{plugin_name}' is not in user plugins directory.")
+
+
+def cmd_info(args):
+    """Displays detailed metadata and configuration for a plugin."""
+    plugin_name = args.name.strip()
+    doc = load_settings_toml()
+    plugins_cfg = doc.get("plugins", {})
+    user_dir = get_user_plugins_dir()
+    builtin_dir = get_builtin_plugins_dir()
+
+    is_builtin = (builtin_dir / plugin_name).exists() or (builtin_dir / f"{plugin_name}.py").exists()
+    is_user = (user_dir / plugin_name).exists() or (user_dir / f"{plugin_name}.py").exists()
+
+    val = plugins_cfg.get(plugin_name, None)
+    if val is None:
+        status = "not configured (disabled by default)"
+    elif isinstance(val, dict):
+        status = "enabled" if val.get("enabled", False) else "disabled"
+    else:
+        status = "enabled" if val else "disabled"
+
+    print(f"\nPlugin Information: {plugin_name}")
+    print("-" * 50)
+    print(f"Status in settings.toml : {status}")
+    if is_builtin:
+        print(f"Installed Location      : Built-in ({builtin_dir / plugin_name})")
+    elif is_user:
+        print(f"Installed Location      : User-space ({user_dir / plugin_name})")
+    else:
+        print(f"Installed Location      : Not installed locally")
+
+    registry = fetch_registry(args.registry)
+    if registry and "plugins" in registry and plugin_name in registry["plugins"]:
+        details = registry["plugins"][plugin_name]
+        print(f"Registry Version        : {details.get('version', 'N/A')}")
+        print(f"Author                  : {details.get('author', 'N/A')}")
+        print(f"Platforms               : {', '.join(details.get('platforms', ['any']))}")
+        print(f"Description             : {details.get('description', 'N/A')}")
+        if "dependencies" in details:
+            print(f"Dependencies            : {', '.join(details['dependencies'])}")
+        if "config" in details:
+            print(f"Configuration Options   : {details['config']}")
+    else:
+        print(f"Registry Availability   : Not found in registry {args.registry}")
+    print()
 
 
 def main():
@@ -262,6 +285,19 @@ def main():
         "--force", action="store_true", help="Overwrite existing plugin files if already installed"
     )
 
+    # update
+    p_upd = subparsers.add_parser("update", help="Update installed plugins from registry or local repo")
+    p_upd.add_argument("name", nargs="?", default="all", help="Plugin name to update (or 'all' for all installed)")
+    p_upd.add_argument("--source", help="Optional local path of plugin to install from")
+
+    # enable
+    p_en = subparsers.add_parser("enable", help="Enable an installed plugin in settings.toml")
+    p_en.add_argument("name", help="Name of plugin to enable")
+
+    # disable
+    p_dis = subparsers.add_parser("disable", help="Disable an installed plugin in settings.toml")
+    p_dis.add_argument("name", help="Name of plugin to disable")
+
     # remove
     p_rem = subparsers.add_parser("remove", help="Disable and remove a plugin")
     p_rem.add_argument("name", help="Name of plugin to remove")
@@ -269,16 +305,27 @@ def main():
         "--purge", action="store_true", help="Delete plugin files from disk"
     )
 
+    # info
+    p_info = subparsers.add_parser("info", help="Display details about a plugin")
+    p_info.add_argument("name", help="Name of plugin")
+
     args = parser.parse_args()
     if not getattr(args, "registry", None):
-        args.registry = get_default_registry()
+        args.registry = get_configured_registry_source()
 
-    if args.command == "list":
-        cmd_list(args)
-    elif args.command == "install":
-        cmd_install(args)
-    elif args.command == "remove":
-        cmd_remove(args)
+    commands = {
+        "list": cmd_list,
+        "install": cmd_install,
+        "update": cmd_update,
+        "enable": cmd_enable,
+        "disable": cmd_disable,
+        "remove": cmd_remove,
+        "info": cmd_info,
+    }
+
+    cmd_func = commands.get(args.command)
+    if cmd_func:
+        cmd_func(args)
 
 
 if __name__ == "__main__":

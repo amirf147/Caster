@@ -370,6 +370,12 @@ def _get_defaults():
         # Plugin activation settings
         "plugins": {},
 
+        # Plugin manager global configuration
+        "plugins_config": {
+            "enabled": True,
+            "registry_url": "https://raw.githubusercontent.com/amirf147/caster-plugins/master/manifest.json",
+        },
+
         # miscellaneous section
         "miscellaneous": {
             "dev_commands": True,

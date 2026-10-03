@@ -70,6 +70,11 @@ setuptools.setup(
         "scandir",
         "pyvda;platform_system=='Windows'",
     ],
+    entry_points={
+        "console_scripts": [
+            "caster-plugin=castervoice.bin.plugin_cli:main",
+        ],
+    },
     cmdclass={'install': new_install,
               'develop': dev_install,
               },
